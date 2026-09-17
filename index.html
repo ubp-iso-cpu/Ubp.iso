@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISO Идэвхжүүлэлтийн аян — Сургалтын бичлэг</title>
+<style>
+  :root{
+    --ink:#1c2b24;
+    --paper:#f6f4ee;
+    --line:#d9d3c3;
+    --forest:#2f5d4f;
+    --forest-dark:#234539;
+    --locked:#9b9284;
+    --card:#ffffff;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Georgia", "Noto Serif", serif;
+    line-height:1.55;
+  }
+  header{ padding:36px 24px 20px; max-width:880px; margin:0 auto; }
+  header .tag{
+    font-family:"Helvetica Neue", Arial, sans-serif;
+    font-size:13px; color:var(--forest); margin:0 0 6px;
+  }
+  header h1{ font-size:clamp(24px,4vw,32px); margin:0 0 10px; font-weight:600; }
+  header p{ font-family:"Helvetica Neue", Arial, sans-serif; font-size:15px; color:#4b4438; max-width:640px; }
+  header .whoami{
+    font-family:"Helvetica Neue", Arial, sans-serif; font-size:13.5px; color:#5a5344;
+    margin-top:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+  header .whoami button{
+    font-family:"Helvetica Neue", Arial, sans-serif;
+    background:none; border:1px solid var(--line); border-radius:5px;
+    padding:5px 10px; font-size:12.5px; color:#7c7462; cursor:pointer;
+  }
+
+  main{ max-width:880px; margin:0 auto; padding:0 24px 80px; }
+
+  .weeks{ display:flex; gap:8px; margin:24px 0 22px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .weeks button{
+    font-family:"Helvetica Neue", Arial, sans-serif;
+    background:none; border:none; padding:10px 4px; margin-right:18px;
+    font-size:14px; color:#7c7462; cursor:pointer;
+    border-bottom:2px solid transparent; position:relative; top:1px;
+  }
+  .weeks button .dot{
+    display:inline-block; width:6px; height:6px; border-radius:50%;
+    background:var(--locked); margin-right:7px; position:relative; top:-1px;
+  }
+  .weeks button.done .dot{ background:var(--forest); }
+  .weeks button.scheduled{ color:#b0a998; }
+  .weeks button.scheduled .dot{ background:transparent; border:1px solid var(--locked); }
+  .weeks button.active{ color:var(--ink); border-bottom-color:var(--forest); font-weight:600; }
+
+  .panel{ display:none; }
+  .panel.active{ display:block; }
+
+  .video-card{ background:var(--card); border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+
+  .player-wrap{
+    position:relative; width:100%; aspect-ratio:16/9; background:#101614;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .player-wrap iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
+  .player-wrap .player-shield{ position:absolute; inset:0; background:transparent; }
+  .player-wrap .novideo{ color:#8a8272; font-family:"Helvetica Neue", Arial, sans-serif; font-size:14px; z-index:1; }
+
+  .custom-controls{ display:flex; align-items:center; gap:12px; padding:14px 20px 4px; font-family:"Helvetica Neue", Arial, sans-serif; }
+  .playbtn{
+    width:38px; height:38px; border-radius:50%; border:1px solid var(--line); background:#fff;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex:0 0 auto; font-size:15px; color:var(--forest);
+  }
+  .playbtn:hover{ background:#eef4f0; }
+  .playbtn[disabled]{ opacity:.4; cursor:not-allowed; }
+  .iconbtn{
+    height:32px; min-width:32px; padding:0 8px; border-radius:6px;
+    border:1px solid var(--line); background:#fff; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+    font-size:12px; font-weight:700; color:#5a5344; letter-spacing:.02em;
+  }
+  .iconbtn:hover{ background:#eef4f0; }
+  .iconbtn.active{ background:var(--forest); color:#fff; border-color:var(--forest); }
+  .iconbtn[disabled]{ opacity:.4; cursor:not-allowed; }
+
+  .video-meta{ padding:6px 20px 18px; font-family:"Helvetica Neue", Arial, sans-serif; }
+  .video-meta h2{ font-size:18px; margin:0 0 6px; font-family:Georgia, serif; }
+  .video-meta .desc{ font-size:14px; color:#5a5344; margin:0 0 14px; }
+
+  .progressline{ height:4px; background:#eae6da; border-radius:2px; overflow:hidden; margin-bottom:10px; flex:1; }
+  .progressline i{ display:block; height:100%; width:0%; background:var(--forest); transition:width .15s linear; }
+  .status-row{ display:flex; align-items:center; justify-content:space-between; font-size:13px; color:#7c7462; }
+  .status-row .hint{ font-size:12.5px; }
+
+  .unlock-box{
+    margin-top:16px; padding:16px 18px; border-radius:6px;
+    background:#eef4f0; border:1px solid #cfe1d7;
+    display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+  }
+  .unlock-box.locked{ background:#f1efe7; border-color:var(--line); color:#8a8272; }
+  .unlock-box .msg{ font-size:14px; }
+  .unlock-box .msg b{ display:block; font-size:15px; color:var(--ink); margin-bottom:2px;}
+
+  a.btn, button.btn{
+    font-family:"Helvetica Neue", Arial, sans-serif;
+    background:var(--forest); color:#fff; border:none;
+    padding:11px 22px; border-radius:5px; font-size:14px; font-weight:600;
+    text-decoration:none; cursor:pointer; white-space:nowrap;
+  }
+  a.btn:hover{ background:var(--forest-dark); }
+  button.btn[disabled]{ background:var(--locked); cursor:not-allowed; }
+
+  .note{
+    margin-top:28px; font-family:"Helvetica Neue", Arial, sans-serif;
+    font-size:12.5px; color:#8a8272; border-top:1px solid var(--line); padding-top:14px;
+  }
+
+  .seekwarn{
+    position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(10px);
+    background:#2a2620; color:#f3efe4; font-family:"Helvetica Neue", Arial, sans-serif;
+    font-size:13.5px; padding:10px 18px; border-radius:20px;
+    opacity:0; pointer-events:none; transition:opacity .2s, transform .2s;
+  }
+  .seekwarn.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* Нэвтрэх дэлгэц */
+  .login-overlay{
+    position:fixed; inset:0; background:rgba(28,43,36,.55);
+    display:flex; align-items:center; justify-content:center; padding:20px; z-index:50;
+  }
+  .login-card{
+    background:var(--card); border-radius:8px; padding:28px 26px; max-width:380px; width:100%;
+    font-family:"Helvetica Neue", Arial, sans-serif;
+  }
+  .login-card h2{ font-family:Georgia, serif; font-size:20px; margin:0 0 6px; color:var(--ink); }
+  .login-card p{ font-size:13.5px; color:#5a5344; margin:0 0 18px; }
+  .login-card label{ display:block; font-size:12.5px; color:#5a5344; margin:0 0 5px; }
+  .login-card input{
+    width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:5px;
+    font-size:14px; margin-bottom:14px; font-family:inherit; background:#fff; color:var(--ink);
+  }
+  .login-card button{ width:100%; }
+  .login-card .err{ color:#a34433; font-size:12.5px; margin:-8px 0 12px; }
+  [hidden]{ display:none !important; }
+</style>
+</head>
+<body>
+
+<div class="login-overlay" id="loginOverlay">
+  <form class="login-card" id="loginForm">
+    <h2 id="loginTitleEl">Тавтай морил</h2>
+    <p id="loginIntroEl">ISO идэвхжvvлэлтийн аяны сургалтад орохын өмнө алба/нэгж, албан тушаал болон өөрийн нэрээ оруулна уу.</p>
+
+    <label for="loginOrgSelect">Алба, нэгж</label>
+    <select id="loginOrgSelect" hidden></select>
+    <input id="loginOrgText" type="text" placeholder="Жишээ нь: Санхvv хэлтэс">
+
+    <label for="loginPositionSelect">Албан тушаал</label>
+    <select id="loginPositionSelect" hidden></select>
+    <input id="loginPositionText" type="text" placeholder="Жишээ нь: Мэргэжилтэн">
+
+    <label for="loginName">Таны нэр</label>
+    <input id="loginName" type="text" required placeholder="Жишээ нь: Бат-Эрдэнэ">
+    <div class="err" id="loginErr" hidden>Бvх талбарыг бvрэн бөглөнө vv.</div>
+    <button class="btn" type="submit">Vргэлжлvvлэх</button>
+  </form>
+</div>
+
+<header>
+  <p class="tag">ISO ИДЭВХЖҮҮЛЭЛТИЙН АЯН</p>
+  <h1 id="pageTitleEl">Долоо хоног бүрийн сургалтын бичлэг</h1>
+  <p id="pageIntroEl">Бичлэгийг эхнээс нь дуустал үзсэний дараа мэдлэгийн сорилын холбоос нээгддэг. YouTube-ийн стандарт
+  удирдлагын самбар нуугдсан — зөвхөн Тоглуулах/Түр зогсоох товч ашиглана, урагшлуулах бариул харагдахгvй.</p>
+  <div class="whoami" id="whoami" hidden>
+    <span id="whoamiText"></span>
+    <button type="button" id="switchUserBtn">Хэрэглэгч солих</button>
+  </div>
+</header>
+
+<main>
+  <nav class="weeks" id="weekNav"></nav>
+  <div id="panels"></div>
+
+  <p class="note" id="footerNoteEl">
+    Асуудал гарвал ажлын байрны админтай холбогдоно уу. Бичлэг болон формын холбоосыг админ хэсгээс
+    (<code>admin.html</code>) удирддаг.
+  </p>
+</main>
+
+<div class="seekwarn" id="seekWarn">Бичлэгийг урагшлуулж болохгүй — эхлээд одоогийн хэсгээ үзнэ үү</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+/* ЭНД өөрийн Apps Script Web App URL-г тавина (admin.html-тэй адил утга байх ёстой) */
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwq2Oeh5PEyqoT1SAD3HAahmSrOtAYL4n5lUCzGDIWZtI06es05-0v9yfGonSZKIXXv/exec";
+
+const IDENTITY_KEY = "iso_ayan_identity";
+const PROGRESS_PREFIX = "iso_ayan_progress_";
+
+const nav = document.getElementById("weekNav");
+const panels = document.getElementById("panels");
+const seekWarn = document.getElementById("seekWarn");
+const players = {}; // index -> {ytPlayer, maxTime, done, duration, weekId}
+let WEEKS = [];
+let ytApiReady = false;
+
+/* ---------- Нэвтрэх (алба/нэгж + албан тушаал + нэр) ---------- */
+function loadIdentity(){
+  try{
+    const raw = localStorage.getItem(IDENTITY_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function saveIdentity(identity){
+  try{ localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity)); }catch(e){}
+}
+function showLogin(){ document.getElementById("loginOverlay").hidden = false; }
+function hideLogin(){ document.getElementById("loginOverlay").hidden = true; }
+function renderWhoami(identity){
+  const box = document.getElementById("whoami");
+  const parts = [identity.org, identity.position].filter(Boolean).join(", ");
+  document.getElementById("whoamiText").textContent =
+    "Тавтай морил, " + identity.name + (parts ? " (" + parts + ")" : "");
+  box.hidden = false;
+}
+
+function populateSelect(selectEl, textEl, options){
+  if(options && options.length){
+    selectEl.innerHTML = '<option value="">-- сонгоно уу --</option>' +
+      options.map(o => `<option value="${escapeAttr(o)}">${escapeHtml(o)}</option>`).join("");
+    selectEl.hidden = false;
+    textEl.hidden = true;
+  } else {
+    selectEl.hidden = true;
+    textEl.hidden = false;
+  }
+}
+function escapeAttr(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
+function escapeHtml(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+function getFieldValue(selectEl, textEl){
+  return selectEl.hidden ? textEl.value.trim() : selectEl.value.trim();
+}
+
+// Алба нэгж сонгоход зөвхөн тухайн албаны албан тушаалууд харагдах (cascading dropdown)
+function setupOrgSelects(orgRows){
+  const orgMap = {};
+  (orgRows || []).forEach((r) => {
+    if(!r.department) return;
+    if(!orgMap[r.department]) orgMap[r.department] = [];
+    if(r.position) orgMap[r.department].push(r.position);
+  });
+  const departmentList = Object.keys(orgMap);
+
+  const orgSelect = document.getElementById("loginOrgSelect");
+  const orgText = document.getElementById("loginOrgText");
+  const posSelect = document.getElementById("loginPositionSelect");
+  const posText = document.getElementById("loginPositionText");
+
+  populateSelect(orgSelect, orgText, departmentList);
+
+  function refreshPositions(){
+    populateSelect(posSelect, posText, orgMap[orgSelect.value] || []);
+  }
+
+  if(departmentList.length){
+    orgSelect.addEventListener("change", refreshPositions);
+    refreshPositions();
+  } else {
+    populateSelect(posSelect, posText, []);
+  }
+}
+
+document.getElementById("loginForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const orgSelect = document.getElementById("loginOrgSelect");
+  const orgText = document.getElementById("loginOrgText");
+  const posSelect = document.getElementById("loginPositionSelect");
+  const posText = document.getElementById("loginPositionText");
+  const org = getFieldValue(orgSelect, orgText);
+  const position = getFieldValue(posSelect, posText);
+  const name = document.getElementById("loginName").value.trim();
+  if(!org || !name){
+    document.getElementById("loginErr").hidden = false;
+    return;
+  }
+  const identity = { org, position, name };
+  saveIdentity(identity);
+  logProgressEvent("login", "");
+  // Хэрэглэгч бvр өөрийн явцаа зөв харахын тулд шинэ identity-ээр бvрэн дахин ачаална
+  location.reload();
+});
+document.getElementById("switchUserBtn").addEventListener("click", () => {
+  localStorage.removeItem(IDENTITY_KEY);
+  location.reload();
+});
+
+async function logProgressEvent(eventName, weekId){
+  const identity = loadIdentity();
+  if(!identity) return;
+  try{
+    await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "logProgress",
+        org: identity.org || "",
+        position: identity.position || "",
+        name: identity.name || "",
+        weekId: weekId || "",
+        event: eventName,
+      }),
+    });
+  }catch(e){}
+}
+
+function applySiteConfig(site){
+  if(!site) return;
+  const map = {
+    pageTitleEl: site.pageTitle,
+    pageIntroEl: site.pageIntro,
+    loginTitleEl: site.loginTitle,
+    loginIntroEl: site.loginIntro,
+  };
+  Object.keys(map).forEach((id) => {
+    if(map[id]) document.getElementById(id).textContent = map[id];
+  });
+  if(site.footerNote){
+    const el = document.getElementById("footerNoteEl");
+    el.textContent = site.footerNote;
+  }
+}
+
+/* ---------- Явцын хадгалалт (browser локал, хэрэглэгч тус бvрээр тусгаарлагдсан) ---------- */
+// Нэг browser дээр өөр өөр хvн "Хэрэглэгч солих"-оор ордог тул явцыг зөвхөн
+// weekId-ээр биш, тухайн хэрэглэгчийн identity-тэй хамт түлхvvрлэнэ — ингэснээр
+// дараагийн хэрэглэгч өмнөх хvний "vзэж дууссан" төлөвийг өвлөхгvй.
+function progressKey(weekId){
+  const identity = loadIdentity();
+  const idPart = identity ? [identity.org, identity.position, identity.name].join("::") : "anon";
+  return PROGRESS_PREFIX + encodeURIComponent(idPart) + "_" + weekId;
+}
+function loadProgress(weekId){
+  try{
+    const raw = localStorage.getItem(progressKey(weekId));
+    return raw ? JSON.parse(raw) : { maxTime: 0, done: false };
+  }catch(e){ return { maxTime: 0, done: false }; }
+}
+function saveProgress(weekId, state){
+  try{ localStorage.setItem(progressKey(weekId), JSON.stringify(state)); }catch(e){}
+}
+function flashWarn(){
+  seekWarn.classList.add("show");
+  clearTimeout(flashWarn._t);
+  flashWarn._t = setTimeout(()=> seekWarn.classList.remove("show"), 1400);
+}
+
+function formatDateTime(iso){
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "." + pad(d.getMonth()+1) + "." + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
+
+function getWeekStatus(week){
+  const now = new Date();
+  const opens = week.opensAt ? new Date(week.opensAt) : null;
+  const closes = week.closesAt ? new Date(week.closesAt) : null;
+  if(opens && !isNaN(opens.getTime()) && now < opens) return "upcoming";
+  if(closes && !isNaN(closes.getTime()) && now > closes) return "closed";
+  return "open";
+}
+
+function renderUnlocked(index, week, btn){
+  const unlockBox = document.getElementById("unlock-" + index);
+  unlockBox.classList.remove("locked");
+  const formLink = week.formUrl
+    ? `<a class="btn" href="${week.formUrl}" target="_blank" rel="noopener">Форм бөглөх</a>`
+    : `<button class="btn" disabled>Форм холбоос тохируулаагvй</button>`;
+  unlockBox.innerHTML = `
+    <div class="msg"><b>Бичлэг үзэж дууссан</b>Одоо мэдлэгийн сорилыг бөглөж болно.</div>
+    ${formLink}
+  `;
+  btn.classList.add("done");
+}
+
+function buildWeek(week, index){
+  const state = loadProgress(week.id);
+  const status = getWeekStatus(week);
+  week._status = status;
+
+  const btn = document.createElement("button");
+  btn.innerHTML = '<span class="dot"></span>' + (index+1) + "-р сургалт";
+  if(state.done) btn.classList.add("done");
+  if(status !== "open") btn.classList.add("scheduled");
+  btn.addEventListener("click", () => selectWeek(index));
+  nav.appendChild(btn);
+
+  const panel = document.createElement("section");
+  panel.className = "panel";
+  panel.id = "panel-" + index;
+
+  if(status === "upcoming"){
+    panel.innerHTML = `
+      <div class="video-card">
+        <div class="video-meta" style="padding-top:20px;">
+          <h2>${week.title}</h2>
+          <p class="desc">${week.desc || ""}</p>
+          <div class="unlock-box locked">
+            <div class="msg"><b>Энэ сургалт удахгvй нээгдэнэ</b>Нээгдэх хугацаа: ${formatDateTime(week.opensAt)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+    panels.appendChild(panel);
+    players[index] = { maxTime: 0, done: false, duration: 0, ytPlayer: null, weekId: week.id };
+    return;
+  }
+
+  if(status === "closed"){
+    panel.innerHTML = `
+      <div class="video-card">
+        <div class="video-meta" style="padding-top:20px;">
+          <h2>${week.title}</h2>
+          <p class="desc">${week.desc || ""}</p>
+          <div class="unlock-box locked">
+            <div class="msg"><b>Энэ сургалтын хугацаа дууссан</b>${week.closesAt ? formatDateTime(week.closesAt) + " хvртэл нээлттэй байсан." : ""}</div>
+          </div>
+        </div>
+      </div>
+    `;
+    panels.appendChild(panel);
+    players[index] = { maxTime: 0, done: state.done, duration: 0, ytPlayer: null, weekId: week.id };
+    return;
+  }
+
+  const hasVideo = !!week.youtubeId;
+  panel.innerHTML = `
+    <div class="video-card">
+      <div class="player-wrap" id="wrap-${index}">
+        ${hasVideo
+          ? `<div id="yt-${index}"></div><div class="player-shield" title="Тоглуулах/Түр зогсоох товчийг ашиглана уу"></div>`
+          : `<span class="novideo">Энэ сургалтын бичлэг удахгvй нэмэгдэнэ</span>`}
+      </div>
+      <div class="custom-controls">
+        <button class="playbtn" id="play-${index}" ${hasVideo ? "" : "disabled"}>▶</button>
+        <div class="progressline"><i id="bar-${index}"></i></div>
+        <span id="pct-${index}" style="font-size:12.5px;color:#7c7462;min-width:42px;text-align:right;">0%</span>
+        <button class="iconbtn active" id="cc-${index}" ${hasVideo ? "" : "disabled"} title="Хадмал асаах/унтраах">CC</button>
+        <button class="iconbtn" id="fs-${index}" ${hasVideo ? "" : "disabled"} title="Дэлгэц томруулах">⛶</button>
+      </div>
+      <div class="video-meta">
+        <h2>${week.title}</h2>
+        <p class="desc">${week.desc || ""}</p>
+        <div class="status-row"><span class="hint">${week.closesAt ? "Хугацаа: " + formatDateTime(week.closesAt) + " хvртэл. " : ""}Бичлэгийг зөвхөн дуустал урагшлуулж болохгvй, зөвхөн тоглуулах/зогсоох боломжтой.</span></div>
+        <div class="unlock-box locked" id="unlock-${index}">
+          <div class="msg"><b>Форм түгжигдсэн байна</b>Бичлэгийг дуустал үзсэний дараа мэдлэгийн сорил нээгдэнэ.</div>
+          <button class="btn" disabled>Форм бөглөх</button>
+        </div>
+      </div>
+    </div>
+  `;
+  panels.appendChild(panel);
+
+  if(state.done){
+    const btnEl = document.querySelector("#weekNav button:nth-child(" + (index+1) + ")");
+    renderUnlocked(index, week, btnEl);
+  }
+
+  players[index] = { maxTime: state.maxTime || 0, done: state.done, duration: 0, ytPlayer: null, weekId: week.id };
+}
+
+function selectWeek(index){
+  document.querySelectorAll(".panel").forEach((p,i) => p.classList.toggle("active", i===index));
+  document.querySelectorAll("#weekNav button").forEach((b,i) => b.classList.toggle("active", i===index));
+}
+
+function initPlayer(index, week){
+  if(!week.youtubeId || week._status !== "open") return;
+  const p = new YT.Player("yt-" + index, {
+    videoId: week.youtubeId,
+    playerVars: {
+      controls: 0,
+      disablekb: 1,
+      fs: 0,
+      rel: 0,
+      modestbranding: 1,
+      playsinline: 1,
+      cc_load_policy: 1
+    },
+    events: {
+      onReady: () => {
+        players[index].ytPlayer = p;
+        players[index].duration = p.getDuration() || 0;
+      },
+      onStateChange: (e) => {
+        const playBtn = document.getElementById("play-" + index);
+        if(e.data === YT.PlayerState.PLAYING){ playBtn.textContent = "⏸"; }
+        if(e.data === YT.PlayerState.PAUSED){ playBtn.textContent = "▶"; }
+        if(e.data === YT.PlayerState.ENDED){
+          const wasDone = players[index].done;
+          players[index].maxTime = players[index].duration;
+          players[index].done = true;
+          saveProgress(players[index].weekId, { maxTime: players[index].maxTime, done: true });
+          const btnEl = document.querySelectorAll("#weekNav button")[index];
+          renderUnlocked(index, week, btnEl);
+          if(!wasDone) logProgressEvent("video_completed", week.id);
+        }
+      }
+    }
+  });
+
+  document.getElementById("play-" + index).addEventListener("click", () => {
+    const state = p.getPlayerState();
+    if(state === YT.PlayerState.PLAYING){ p.pauseVideo(); }
+    else { p.playVideo(); }
+  });
+
+  let ccOn = true;
+  const ccBtn = document.getElementById("cc-" + index);
+  ccBtn.addEventListener("click", () => {
+    ccOn = !ccOn;
+    ccBtn.classList.toggle("active", ccOn);
+    try{
+      if(ccOn){ p.loadModule("captions"); }
+      else { p.unloadModule("captions"); }
+    }catch(e){}
+  });
+
+  document.getElementById("fs-" + index).addEventListener("click", () => {
+    const wrap = document.getElementById("wrap-" + index);
+    if(wrap.requestFullscreen){ wrap.requestFullscreen(); }
+    else if(wrap.webkitRequestFullscreen){ wrap.webkitRequestFullscreen(); }
+    else if(wrap.msRequestFullscreen){ wrap.msRequestFullscreen(); }
+  });
+}
+
+// Урагшлуулж гvйлгэхээс хамгаалах "snap back" — 400мс тутам шалгана
+setInterval(() => {
+  Object.keys(players).forEach((idxStr) => {
+    const idx = Number(idxStr);
+    const rec = players[idx];
+    if(!rec.ytPlayer) return;
+    let cur;
+    try{ cur = rec.ytPlayer.getCurrentTime(); }catch(e){ return; }
+    if(!rec.duration){ rec.duration = rec.ytPlayer.getDuration() || 0; }
+
+    const buffer = 1.5;
+    if(cur > rec.maxTime + buffer){
+      rec.ytPlayer.seekTo(rec.maxTime, true);
+      flashWarn();
+    } else if(cur > rec.maxTime){
+      rec.maxTime = cur;
+      saveProgress(rec.weekId, { maxTime: rec.maxTime, done: rec.done });
+    }
+
+    if(rec.duration){
+      const pctVal = Math.min(100, Math.round((rec.maxTime / rec.duration) * 100));
+      const bar = document.getElementById("bar-" + idx);
+      const pctLbl = document.getElementById("pct-" + idx);
+      if(bar){ bar.style.width = pctVal + "%"; }
+      if(pctLbl){ pctLbl.textContent = pctVal + "%"; }
+    }
+  });
+}, 400);
+
+async function loadWeeks(){
+  let bundle;
+  try{
+    const res = await fetch(APPS_SCRIPT_URL);
+    if(!res.ok) throw new Error("config fetch failed");
+    bundle = await res.json();
+  }catch(e){
+    panels.innerHTML = '<p style="font-family:\'Helvetica Neue\',Arial,sans-serif;color:#a34433;">Сургалтын мэдээлэл татахад алдаа гарлаа. Дараа дахин оролдоно уу.</p>';
+    return;
+  }
+  WEEKS = bundle.weeks || [];
+  applySiteConfig(bundle.site);
+  setupOrgSelects(bundle.org || []);
+  WEEKS.forEach(buildWeek);
+  if(WEEKS.length) selectWeek(0);
+  if(ytApiReady){
+    WEEKS.forEach((week, index) => initPlayer(index, week));
+  }
+
+  // Нээгдэх/хаагдах хугацаа шилжсэн vед (жишээ нь хvлээж байтал цонх нээгдэх vед)
+  // хуудсыг дахин ачаалж, зөв тєлєвийг харуулна.
+  setInterval(() => {
+    const changed = WEEKS.some((week) => getWeekStatus(week) !== week._status);
+    if(changed) location.reload();
+  }, 60000);
+}
+
+window.onYouTubeIframeAPIReady = function(){
+  ytApiReady = true;
+  if(WEEKS.length){
+    WEEKS.forEach((week, index) => initPlayer(index, week));
+  }
+};
+
+/* ---------- Эхлэл ---------- */
+const identity = loadIdentity();
+if(identity){
+  renderWhoami(identity);
+  hideLogin();
+} else {
+  showLogin();
+}
+loadWeeks();
+</script>
+
+</body>
+</html>

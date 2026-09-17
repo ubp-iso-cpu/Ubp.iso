@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISO Аян — Админ</title>
+<style>
+  :root{
+    --ink:#1c2b24; --paper:#f6f4ee; --line:#d9d3c3;
+    --forest:#2f5d4f; --forest-dark:#234539; --card:#ffffff; --err:#a34433;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--paper); color:var(--ink); font-family:"Helvetica Neue", Arial, sans-serif; line-height:1.5; }
+  header{ padding:30px 24px 16px; max-width:900px; margin:0 auto; }
+  header .tag{ font-size:13px; color:var(--forest); margin:0 0 6px; }
+  header h1{ font-family:Georgia, serif; font-size:26px; margin:0 0 8px; }
+  header p{ font-size:14px; color:#4b4438; max-width:600px; }
+  main{ max-width:900px; margin:0 auto; padding:0 24px 80px; }
+
+  .login-card{
+    background:var(--card); border:1px solid var(--line); border-radius:8px;
+    padding:24px; max-width:360px;
+  }
+  .login-card label{ display:block; font-size:12.5px; color:#5a5344; margin:0 0 5px; }
+  .login-card input{
+    width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:5px;
+    font-size:14px; margin-bottom:14px; font-family:inherit; background:#fff; color:var(--ink);
+  }
+  .err{ color:var(--err); font-size:12.5px; margin:-6px 0 12px; }
+
+  a.btn, button.btn{
+    background:var(--forest); color:#fff; border:none; padding:10px 18px; border-radius:5px;
+    font-size:14px; font-weight:600; text-decoration:none; cursor:pointer; white-space:nowrap;
+    font-family:inherit;
+  }
+  a.btn:hover, button.btn:hover{ background:var(--forest-dark); }
+  button.btn[disabled]{ background:#9b9284; cursor:not-allowed; }
+  button.btn.secondary{ background:#fff; color:var(--forest); border:1px solid var(--line); }
+  button.btn.secondary:hover{ background:#eef4f0; }
+  button.btn.danger{ background:#fff; color:var(--err); border:1px solid #e5c9c0; }
+  button.btn.danger:hover{ background:#fbeeea; }
+
+  .tabs{ display:flex; gap:6px; margin:18px 0 20px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .tabs button{
+    background:none; border:none; padding:10px 6px; margin-right:16px; font-size:14px;
+    color:#7c7462; cursor:pointer; border-bottom:2px solid transparent; font-family:inherit;
+  }
+  .tabs button.active{ color:var(--ink); font-weight:600; border-bottom-color:var(--forest); }
+  .tabpanel{ display:none; }
+  .tabpanel.active{ display:block; }
+
+  .week-card{
+    background:var(--card); border:1px solid var(--line); border-radius:6px;
+    padding:18px 20px; margin-bottom:16px;
+  }
+  .week-card .row{ display:flex; gap:6px; align-items:center; margin-bottom:12px; }
+  .week-card .row-title{ font-weight:600; font-size:14px; flex:1; }
+  .field{ margin-bottom:12px; }
+  .field label{ display:block; font-size:12.5px; color:#5a5344; margin:0 0 5px; }
+  .field input, .field textarea{
+    width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:5px;
+    font-size:14px; font-family:inherit; background:#fff; color:var(--ink);
+  }
+  .field textarea{ resize:vertical; min-height:52px; }
+  .field .hint{ font-size:11.5px; color:#9b9284; margin-top:4px; }
+
+  .toolbar{ display:flex; gap:10px; align-items:center; margin:20px 0 14px; flex-wrap:wrap; }
+  .status{ font-size:13px; color:#5a5344; }
+  .status.ok{ color:var(--forest); }
+  .status.err{ color:var(--err); }
+
+  table{ width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  th, td{ padding:9px 12px; text-align:left; font-size:13.5px; border-bottom:1px solid var(--line); }
+  th{ background:#f1efe7; font-weight:600; }
+  tr:last-child td{ border-bottom:none; }
+  .kpi-row{ display:flex; gap:14px; margin-bottom:18px; flex-wrap:wrap; }
+  .kpi{ background:var(--card); border:1px solid var(--line); border-radius:6px; padding:14px 18px; min-width:140px; }
+  .kpi .n{ font-size:24px; font-weight:700; color:var(--forest); font-family:Georgia, serif; }
+  .kpi .l{ font-size:12px; color:#7c7462; margin-top:2px; }
+
+  [hidden]{ display:none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <p class="tag">ISO ИДЭВХЖҮҮЛЭЛТИЙН АЯН</p>
+  <h1>Админ хэсэг</h1>
+  <p>Сургалтууд, сайтын текст, алба/тушаалын жагсаалт болон хамрагдалтын тайланг эндээс удирдана.</p>
+</header>
+
+<main>
+  <div class="login-card" id="loginCard">
+    <label for="pwInput">Админ нууц vг</label>
+    <input id="pwInput" type="password" placeholder="Нууц vг">
+    <div class="err" id="pwErr" hidden>Нууц vг буруу байна.</div>
+    <button class="btn" id="pwSubmit">Нэвтрэх</button>
+  </div>
+
+  <div id="adminBody" hidden>
+    <div class="tabs" id="tabs">
+      <button class="active" data-tab="weeks">Сургалтууд</button>
+      <button data-tab="site">Сайтын текст</button>
+      <button data-tab="orgs">Алба / Тушаал</button>
+      <button data-tab="report">Тайлан</button>
+    </div>
+
+    <!-- Сургалтууд -->
+    <section class="tabpanel active" id="tab-weeks">
+      <div id="weekList"></div>
+      <div class="toolbar">
+        <button class="btn secondary" id="addWeekBtn" type="button">+ Сургалт нэмэх</button>
+        <button class="btn" id="saveWeeksBtn" type="button">Хадгалах</button>
+        <span class="status" id="weeksStatus"></span>
+      </div>
+      <p style="font-size:12.5px;color:#8a8272;margin-top:8px;">
+        YouTube видео ID гэдэг нь бичлэгийн 11 тэмдэгттэй ID (жишээ нь
+        youtube.com/watch?v=<b>dQw4w9WgXcQ</b> холбоос дахь тод хэсэг). Видеог "Unlisted" тохиргоотой,
+        "Allow embedding" асаалттай байршуулна. Заасан хугацааны дотор л бичлэг vзэх, форм бөглөх боломжтой
+        байна; хоосон орхивол хугацаагvй нээлттэй байна.
+      </p>
+    </section>
+
+    <!-- Сайтын текст -->
+    <section class="tabpanel" id="tab-site">
+      <div class="week-card">
+        <div class="field">
+          <label>Нvvр хуудасны гарчиг</label>
+          <input type="text" id="site-pageTitle">
+        </div>
+        <div class="field">
+          <label>Нvvр хуудасны тайлбар</label>
+          <textarea id="site-pageIntro"></textarea>
+        </div>
+        <div class="field">
+          <label>Нэвтрэх цонхны гарчиг</label>
+          <input type="text" id="site-loginTitle">
+        </div>
+        <div class="field">
+          <label>Нэвтрэх цонхны тайлбар</label>
+          <textarea id="site-loginIntro"></textarea>
+        </div>
+        <div class="field">
+          <label>Хvснэгтийн доод тайлбар (footer)</label>
+          <textarea id="site-footerNote"></textarea>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="btn" id="saveSiteBtn" type="button">Хадгалах</button>
+        <span class="status" id="siteStatus"></span>
+      </div>
+    </section>
+
+    <!-- Алба / Тушаал -->
+    <section class="tabpanel" id="tab-orgs">
+      <div class="week-card">
+        <div class="field">
+          <label>Алба, нэгж ба албан тушаалын жагсаалт</label>
+          <textarea id="orgText" style="min-height:420px; font-family:monospace; font-size:13px;" placeholder="Санхvvгийн алба | Санхvvгийн албаны дарга&#10;Санхvvгийн алба | Нягтлан бодогч&#10;Хvний нөөцийн алба | Хvний нөөцийн менежер"></textarea>
+          <p class="hint">Мөр бvрт "Алба нэгжийн нэр | Албан тушаал" гэсэн форматаар бичнэ (тэмдэг "|"-ээр тусгаарлана). Нэг алба олон мөрөнд давтагдаж болно — тухайн албаны бvх албан тушаалыг тус тусад нь мөр болгож бичнэ.</p>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="btn" id="saveOrgBtn" type="button">Хадгалах</button>
+        <span class="status" id="orgStatus"></span>
+      </div>
+      <p style="font-size:12.5px;color:#8a8272;margin-top:8px;">
+        Энэ жагсаалт нь ажилтнуудын нэвтрэх цонхонд "Алба, нэгж" сонгосны дараа зөвхөн тухайн албаны
+        албан тушаалууд харагдах (cascading dropdown) байдлаар ажиллана. Хоосон орхивол нэвтрэх цонхонд
+        энгийн текст оруулах талбар харагдана.
+      </p>
+    </section>
+
+    <!-- Тайлан -->
+    <section class="tabpanel" id="tab-report">
+      <div class="toolbar">
+        <button class="btn secondary" id="loadReportBtn" type="button">Тайлан татах</button>
+        <span class="status" id="reportStatus"></span>
+      </div>
+      <div id="reportBody"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+/* ЭНД өөрийн Apps Script Web App URL-г тавина (index.html-тэй адил утга байх ёстой) */
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwq2Oeh5PEyqoT1SAD3HAahmSrOtAYL4n5lUCzGDIWZtI06es05-0v9yfGonSZKIXXv/exec";
+
+let ADMIN_PASSWORD = "";
+let weeks = [];
+let siteConfig = {};
+let orgRows = []; // [{department, position}]
+
+const pwInput = document.getElementById("pwInput");
+const pwSubmit = document.getElementById("pwSubmit");
+const pwErr = document.getElementById("pwErr");
+const loginCard = document.getElementById("loginCard");
+const adminBody = document.getElementById("adminBody");
+const weekList = document.getElementById("weekList");
+
+function uid(){
+  return "week-" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+}
+
+// Apps Script руу custom header илгээвэл CORS preflight vvсгэдэг тул нууц vгийг
+// header биш, text/plain БОДИТ БОДЬ доторх JSON-д хамт илгээнэ.
+async function callAppsScript(payload){
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload),
+  });
+  if(!res.ok) throw new Error("network");
+  return res.json();
+}
+
+/* ---------- Tabs ---------- */
+document.getElementById("tabs").addEventListener("click", (e) => {
+  const tab = e.target.getAttribute("data-tab");
+  if(!tab) return;
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("active", b === e.target));
+  document.querySelectorAll(".tabpanel").forEach(p => p.classList.toggle("active", p.id === "tab-" + tab));
+});
+
+/* ---------- Weeks ---------- */
+function isoToLocalInput(iso){
+  if(!iso) return "";
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
+function localInputToIso(val){
+  if(!val) return "";
+  const d = new Date(val);
+  if(isNaN(d.getTime())) return "";
+  return d.toISOString();
+}
+
+function renderWeeks(){
+  weekList.innerHTML = "";
+  weeks.forEach((w, i) => {
+    const card = document.createElement("div");
+    card.className = "week-card";
+    card.innerHTML = `
+      <div class="row">
+        <span class="row-title">${i+1}-р сургалт</span>
+        <button class="btn danger" type="button" data-action="remove" data-i="${i}">Устгах</button>
+      </div>
+      <div class="field">
+        <label>Гарчиг</label>
+        <input type="text" data-field="title" data-i="${i}" value="${escapeAttr(w.title || "")}">
+      </div>
+      <div class="field">
+        <label>Тайлбар</label>
+        <textarea data-field="desc" data-i="${i}">${escapeHtml(w.desc || "")}</textarea>
+      </div>
+      <div class="field">
+        <label>YouTube видео ID</label>
+        <input type="text" data-field="youtubeId" data-i="${i}" value="${escapeAttr(w.youtubeId || "")}" placeholder="жишээ нь dQw4w9WgXcQ">
+      </div>
+      <div class="field">
+        <label>Microsoft Forms холбоос (formUrl)</label>
+        <input type="text" data-field="formUrl" data-i="${i}" value="${escapeAttr(w.formUrl || "")}" placeholder="https://forms.office.com/...">
+      </div>
+      <div class="row" style="gap:12px;">
+        <div class="field" style="flex:1;">
+          <label>Нээгдэх огноо/цаг</label>
+          <input type="datetime-local" data-field="opensAt" data-i="${i}" value="${isoToLocalInput(w.opensAt)}">
+        </div>
+        <div class="field" style="flex:1;">
+          <label>Хаагдах огноо/цаг</label>
+          <input type="datetime-local" data-field="closesAt" data-i="${i}" value="${isoToLocalInput(w.closesAt)}">
+        </div>
+      </div>
+    `;
+    weekList.appendChild(card);
+  });
+}
+
+function escapeAttr(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
+function escapeHtml(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+weekList.addEventListener("input", (e) => {
+  const field = e.target.getAttribute("data-field");
+  const i = e.target.getAttribute("data-i");
+  if(!field || i === null) return;
+  if(field === "opensAt" || field === "closesAt"){
+    weeks[Number(i)][field] = localInputToIso(e.target.value);
+  } else {
+    weeks[Number(i)][field] = e.target.value;
+  }
+});
+
+// Хэрэглэгч бvтэн YouTube холбоос буулгавал зөвхөн 11 тэмдэгт video ID-г гаргаж авна
+function extractYoutubeId(input){
+  const s = (input || "").trim();
+  if(/^[a-zA-Z0-9_-]{11}$/.test(s)) return s;
+  try{
+    const url = new URL(s);
+    if(url.hostname.indexOf("youtu.be") !== -1){
+      return url.pathname.slice(1).split(/[?&]/)[0];
+    }
+    if(url.hostname.indexOf("youtube.com") !== -1){
+      if(url.searchParams.get("v")) return url.searchParams.get("v");
+      const embedMatch = url.pathname.match(/\/embed\/([a-zA-Z0-9_-]{11})/);
+      if(embedMatch) return embedMatch[1];
+    }
+  }catch(e){}
+  const m = s.match(/[a-zA-Z0-9_-]{11}/);
+  return m ? m[0] : s;
+}
+
+weekList.addEventListener("focusout", (e) => {
+  const field = e.target.getAttribute("data-field");
+  const i = e.target.getAttribute("data-i");
+  if(field !== "youtubeId" || i === null) return;
+  const extracted = extractYoutubeId(e.target.value);
+  weeks[Number(i)][field] = extracted;
+  e.target.value = extracted;
+});
+
+weekList.addEventListener("click", (e) => {
+  const action = e.target.getAttribute("data-action");
+  if(action === "remove"){
+    const i = Number(e.target.getAttribute("data-i"));
+    if(confirm("Энэ сургалтыг устгах уу?")){
+      weeks.splice(i, 1);
+      renderWeeks();
+    }
+  }
+});
+
+document.getElementById("addWeekBtn").addEventListener("click", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const prev = weeks[weeks.length - 1];
+  const opens = (prev && prev.opensAt) ? new Date(new Date(prev.opensAt).getTime() + 2*DAY_MS) : new Date();
+  const closes = new Date(opens.getTime() + 72 * 60 * 60 * 1000);
+  weeks.push({
+    id: uid(), title: "Шинэ сургалт", desc: "", youtubeId: "", formUrl: "",
+    opensAt: opens.toISOString(), closesAt: closes.toISOString(),
+  });
+  renderWeeks();
+});
+
+document.getElementById("saveWeeksBtn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("weeksStatus");
+  statusEl.textContent = "Хадгалж байна...";
+  statusEl.className = "status";
+  // Хадгалахын өмнө youtubeId бvрийг цэвэрлэнэ (хуучин tab-аас vлдсэн бvтэн URL байсан ч засна)
+  weeks.forEach((w) => { w.youtubeId = extractYoutubeId(w.youtubeId); });
+  renderWeeks();
+  try{
+    const data = await callAppsScript({ action: "saveWeeks", password: ADMIN_PASSWORD, weeks });
+    if(!data.ok){
+      statusEl.textContent = data.error === "unauthorized" ? "Нууц vг буруу." : "Алдаа гарлаа.";
+      statusEl.className = "status err";
+      return;
+    }
+    statusEl.textContent = "Амжилттай хадгаллаа.";
+    statusEl.className = "status ok";
+  }catch(e){
+    statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";
+    statusEl.className = "status err";
+  }
+});
+
+/* ---------- Site text ---------- */
+function renderSite(){
+  document.getElementById("site-pageTitle").value = siteConfig.pageTitle || "";
+  document.getElementById("site-pageIntro").value = siteConfig.pageIntro || "";
+  document.getElementById("site-loginTitle").value = siteConfig.loginTitle || "";
+  document.getElementById("site-loginIntro").value = siteConfig.loginIntro || "";
+  document.getElementById("site-footerNote").value = siteConfig.footerNote || "";
+}
+
+document.getElementById("saveSiteBtn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("siteStatus");
+  const site = {
+    pageTitle: document.getElementById("site-pageTitle").value,
+    pageIntro: document.getElementById("site-pageIntro").value,
+    loginTitle: document.getElementById("site-loginTitle").value,
+    loginIntro: document.getElementById("site-loginIntro").value,
+    footerNote: document.getElementById("site-footerNote").value,
+  };
+  statusEl.textContent = "Хадгалж байна...";
+  statusEl.className = "status";
+  try{
+    const data = await callAppsScript({ action: "saveSite", password: ADMIN_PASSWORD, site });
+    if(!data.ok){
+      statusEl.textContent = data.error === "unauthorized" ? "Нууц vг буруу." : "Алдаа гарлаа.";
+      statusEl.className = "status err";
+      return;
+    }
+    siteConfig = site;
+    statusEl.textContent = "Амжилттай хадгаллаа.";
+    statusEl.className = "status ok";
+  }catch(e){
+    statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";
+    statusEl.className = "status err";
+  }
+});
+
+/* ---------- Алба / Тушаал (org structure) ---------- */
+function renderOrgs(){
+  document.getElementById("orgText").value = orgRows.map(r => r.department + " | " + r.position).join("\n");
+}
+
+function parseOrgText(text){
+  return text.split("\n").map(line => {
+    const idx = line.indexOf("|");
+    if(idx === -1) return null;
+    const department = line.slice(0, idx).trim();
+    const position = line.slice(idx + 1).trim();
+    if(!department) return null;
+    return { department, position };
+  }).filter(Boolean);
+}
+
+document.getElementById("saveOrgBtn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("orgStatus");
+  const rows = parseOrgText(document.getElementById("orgText").value);
+  statusEl.textContent = "Хадгалж байна...";
+  statusEl.className = "status";
+  try{
+    const data = await callAppsScript({ action: "saveOrg", password: ADMIN_PASSWORD, org: rows });
+    if(!data.ok){
+      statusEl.textContent = data.error === "unauthorized" ? "Нууц vг буруу." : "Алдаа гарлаа.";
+      statusEl.className = "status err";
+      return;
+    }
+    orgRows = rows;
+    statusEl.textContent = "Амжилттай хадгаллаа.";
+    statusEl.className = "status ok";
+  }catch(e){
+    statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";
+    statusEl.className = "status err";
+  }
+});
+
+/* ---------- Report ---------- */
+document.getElementById("loadReportBtn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("reportStatus");
+  const body = document.getElementById("reportBody");
+  statusEl.textContent = "Татаж байна...";
+  statusEl.className = "status";
+  try{
+    const data = await callAppsScript({ action: "getSummary", password: ADMIN_PASSWORD });
+    if(!data.ok){
+      statusEl.textContent = "Алдаа гарлаа.";
+      statusEl.className = "status err";
+      return;
+    }
+    statusEl.textContent = "";
+    renderReport(data.summary);
+  }catch(e){
+    statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";
+    statusEl.className = "status err";
+  }
+});
+
+function renderReport(summary){
+  const body = document.getElementById("reportBody");
+  const weekIds = summary.weekIds || [];
+  const weekTitles = summary.weekTitles || [];
+
+  let kpiHtml = `
+    <div class="kpi-row">
+      <div class="kpi"><div class="n">${summary.totalParticipants}</div><div class="l">Нийт бvртгvvлсэн хvн</div></div>
+      ${weekIds.map((id, i) => `<div class="kpi"><div class="n">${summary.perWeek[id] || 0}</div><div class="l">${escapeHtml((weekTitles[i]||"").slice(0,28))} vзсэн</div></div>`).join("")}
+    </div>
+  `;
+
+  let tableHtml = `
+    <table>
+      <thead>
+        <tr>
+          <th>Алба, нэгж</th>
+          <th>Бvртгvvлсэн</th>
+          ${weekIds.map((id, i) => `<th>${escapeHtml("Сургалт " + (i+1))}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${(summary.byOrg || []).map(row => `
+          <tr>
+            <td>${escapeHtml(row.org)}</td>
+            <td>${row.participants}</td>
+            ${weekIds.map(id => `<td>${row.perWeek[id] || 0}</td>`).join("")}
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+
+  body.innerHTML = kpiHtml + tableHtml;
+}
+
+/* ---------- Login ---------- */
+async function tryLogin(){
+  pwErr.hidden = true;
+  const pw = pwInput.value;
+  pwSubmit.disabled = true;
+  try{
+    const getRes = await fetch(APPS_SCRIPT_URL);
+    if(!getRes.ok) throw new Error("load failed");
+    const bundle = await getRes.json();
+
+    // youtubeId талбаруудыг эндээс цэвэрлэнэ (өмнөх stale session-ээс vлдсэн бvтэн URL байвал засна)
+    (bundle.weeks || []).forEach((w) => { w.youtubeId = extractYoutubeId(w.youtubeId); });
+
+    // Нууц vгийг шууд баталгаажуулахын тулд одоо байгаа (цэвэрлэсэн) мэдээллийг буцааж бичнэ
+    const data = await callAppsScript({ action: "saveWeeks", password: pw, weeks: bundle.weeks });
+    if(!data.ok){
+      pwErr.textContent = "Нууц vг буруу байна.";
+      pwErr.hidden = false;
+      return;
+    }
+
+    weeks = bundle.weeks || [];
+    siteConfig = bundle.site || {};
+    orgRows = bundle.org || [];
+    ADMIN_PASSWORD = pw;
+    loginCard.hidden = true;
+    adminBody.hidden = false;
+    renderWeeks();
+    renderSite();
+    renderOrgs();
+  }catch(e){
+    pwErr.textContent = "Мэдээлэл татахад алдаа гарлаа.";
+    pwErr.hidden = false;
+  }finally{
+    pwSubmit.disabled = false;
+  }
+}
+
+pwSubmit.addEventListener("click", tryLogin);
+pwInput.addEventListener("keydown", (e) => { if(e.key === "Enter") tryLogin(); });
+</script>
+
+</body>
+</html>

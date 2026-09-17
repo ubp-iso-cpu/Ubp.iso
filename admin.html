@@ -214,6 +214,27 @@ async function callAppsScript(payload){
   return res.json();
 }
 
+// Apps Script заримдаа удаан хариу өгдөг тул унших хvсэлтийг дахин оролдоно.
+async function fetchBundleWithRetry(maxAttempts){
+  let lastErr;
+  for(let attempt = 1; attempt <= maxAttempts; attempt++){
+    try{
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(APPS_SCRIPT_URL, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      return await res.json();
+    }catch(e){
+      lastErr = e;
+      if(attempt < maxAttempts){
+        await new Promise((r) => setTimeout(r, attempt * 1200));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 /* ---------- Tabs ---------- */
 document.getElementById("tabs").addEventListener("click", (e) => {
   const tab = e.target.getAttribute("data-tab");
@@ -501,9 +522,7 @@ async function tryLogin(){
   const pw = pwInput.value;
   pwSubmit.disabled = true;
   try{
-    const getRes = await fetch(APPS_SCRIPT_URL);
-    if(!getRes.ok) throw new Error("load failed");
-    const bundle = await getRes.json();
+    const bundle = await fetchBundleWithRetry(3);
 
     // youtubeId талбаруудыг эндээс цэвэрлэнэ (өмнөх stale session-ээс vлдсэн бvтэн URL байвал засна)
     (bundle.weeks || []).forEach((w) => { w.youtubeId = extractYoutubeId(w.youtubeId); });

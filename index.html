@@ -568,15 +568,58 @@ setInterval(() => {
   });
 }, 400);
 
-async function loadWeeks(){
-  let bundle;
+// Google Apps Script заримдаа удаан хариу өгдөг (ялангуяа олон хvн зэрэг орох vед)
+// тул дахин оролдох логик болон богино хугацааны кэш ашиглаж тогтвортой болгоно.
+const BUNDLE_CACHE_KEY = "iso_ayan_bundle_cache";
+const BUNDLE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function loadCachedBundle(){
   try{
-    const res = await fetch(APPS_SCRIPT_URL);
-    if(!res.ok) throw new Error("config fetch failed");
-    bundle = await res.json();
-  }catch(e){
-    panels.innerHTML = '<p style="font-family:\'Helvetica Neue\',Arial,sans-serif;color:#a34433;">Сургалтын мэдээлэл татахад алдаа гарлаа. Дараа дахин оролдоно уу.</p>';
-    return;
+    const raw = sessionStorage.getItem(BUNDLE_CACHE_KEY);
+    if(!raw) return null;
+    const cached = JSON.parse(raw);
+    if(Date.now() - cached.ts > BUNDLE_CACHE_TTL_MS) return null;
+    return cached.data;
+  }catch(e){ return null; }
+}
+function saveCachedBundle(data){
+  try{ sessionStorage.setItem(BUNDLE_CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); }catch(e){}
+}
+
+async function fetchBundleWithRetry(maxAttempts){
+  let lastErr;
+  for(let attempt = 1; attempt <= maxAttempts; attempt++){
+    try{
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(APPS_SCRIPT_URL, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      return await res.json();
+    }catch(e){
+      lastErr = e;
+      if(attempt < maxAttempts){
+        await new Promise((r) => setTimeout(r, attempt * 1200));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+async function loadWeeks(){
+  let bundle = loadCachedBundle();
+  if(!bundle){
+    try{
+      bundle = await fetchBundleWithRetry(3);
+      saveCachedBundle(bundle);
+    }catch(e){
+      panels.innerHTML = `
+        <div style="font-family:'Helvetica Neue',Arial,sans-serif; text-align:center; padding:30px 16px;">
+          <p style="color:#a34433; margin-bottom:14px;">Сургалтын мэдээлэл татахад алдаа гарлаа (сvлжээ удаан байж болзошгvй). Дахин оролдоно уу.</p>
+          <button class="btn" type="button" onclick="location.reload()">Дахин ачаалах</button>
+        </div>`;
+      return;
+    }
   }
   WEEKS = bundle.weeks || [];
   applySiteConfig(bundle.site);

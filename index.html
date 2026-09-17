@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ISO Идэвхжүүлэлтийн аян — Сургалтын бичлэг</title>
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com">
 <style>
   :root{
     --ink:#1c2b24;
@@ -156,17 +158,17 @@
     <p id="loginIntroEl">ISO идэвхжvvлэлтийн аяны сургалтад орохын өмнө алба/нэгж, албан тушаал болон өөрийн нэрээ оруулна уу.</p>
 
     <label for="loginOrgSelect">Алба, нэгж</label>
-    <select id="loginOrgSelect" hidden></select>
-    <input id="loginOrgText" type="text" placeholder="Жишээ нь: Санхvv хэлтэс">
+    <select id="loginOrgSelect" disabled><option>Уншиж байна...</option></select>
+    <input id="loginOrgText" type="text" placeholder="Жишээ нь: Санхvv хэлтэс" hidden>
 
     <label for="loginPositionSelect">Албан тушаал</label>
-    <select id="loginPositionSelect" hidden></select>
-    <input id="loginPositionText" type="text" placeholder="Жишээ нь: Мэргэжилтэн">
+    <select id="loginPositionSelect" disabled><option>Уншиж байна...</option></select>
+    <input id="loginPositionText" type="text" placeholder="Жишээ нь: Мэргэжилтэн" hidden>
 
     <label for="loginName">Таны нэр</label>
     <input id="loginName" type="text" required placeholder="Жишээ нь: Бат-Эрдэнэ">
     <div class="err" id="loginErr" hidden>Бvх талбарыг бvрэн бөглөнө vv.</div>
-    <button class="btn" type="submit">Vргэлжлvvлэх</button>
+    <button class="btn" type="submit" id="loginSubmitBtn" disabled>Уншиж байна...</button>
   </form>
 </div>
 
@@ -232,6 +234,7 @@ function populateSelect(selectEl, textEl, options){
   if(options && options.length){
     selectEl.innerHTML = '<option value="">-- сонгоно уу --</option>' +
       options.map(o => `<option value="${escapeAttr(o)}">${escapeHtml(o)}</option>`).join("");
+    selectEl.disabled = false;
     selectEl.hidden = false;
     textEl.hidden = true;
   } else {
@@ -613,17 +616,29 @@ async function loadWeeks(){
       bundle = await fetchBundleWithRetry(3);
       saveCachedBundle(bundle);
     }catch(e){
+      const errMsg = "Мэдээлэл татахад алдаа гарлаа (сvлжээ удаан байж болзошгvй). Дахин оролдоно уу.";
       panels.innerHTML = `
         <div style="font-family:'Helvetica Neue',Arial,sans-serif; text-align:center; padding:30px 16px;">
-          <p style="color:#a34433; margin-bottom:14px;">Сургалтын мэдээлэл татахад алдаа гарлаа (сvлжээ удаан байж болзошгvй). Дахин оролдоно уу.</p>
+          <p style="color:#a34433; margin-bottom:14px;">${errMsg}</p>
           <button class="btn" type="button" onclick="location.reload()">Дахин ачаалах</button>
         </div>`;
+      // Нэвтрэх цонх ард талыг нуудаг тул алдааг тэнд ч харуулж, дахин оролдох боломж өгнө
+      const submitBtn = document.getElementById("loginSubmitBtn");
+      submitBtn.textContent = "Дахин ачаалах";
+      submitBtn.disabled = false;
+      submitBtn.type = "button";
+      submitBtn.onclick = () => location.reload();
+      document.getElementById("loginErr").textContent = errMsg;
+      document.getElementById("loginErr").hidden = false;
       return;
     }
   }
   WEEKS = bundle.weeks || [];
   applySiteConfig(bundle.site);
   setupOrgSelects(bundle.org || []);
+  const submitBtn = document.getElementById("loginSubmitBtn");
+  submitBtn.disabled = false;
+  submitBtn.textContent = "Vргэлжлvvлэх";
   WEEKS.forEach(buildWeek);
   if(WEEKS.length) selectWeek(0);
   if(ytApiReady){

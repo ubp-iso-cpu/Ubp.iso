@@ -70,6 +70,19 @@
   }
   .player-wrap iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
   .player-wrap .player-shield{ position:absolute; inset:0; background:transparent; }
+  /* iOS зэрэг олон гар утсан дээр div/iframe-ийн жинхэнэ Fullscreen API
+     тогтворгvй тул CSS-д суурилсан "томруулах" горим ашиглана */
+  .player-wrap.maximized{
+    position:fixed; inset:0; width:100vw; height:100vh; aspect-ratio:auto;
+    z-index:1000; border-radius:0;
+  }
+  .player-wrap .closeMaxBtn{
+    display:none; position:absolute; top:10px; right:10px; z-index:1001;
+    width:34px; height:34px; border-radius:50%; border:1px solid rgba(255,255,255,.35);
+    background:rgba(0,0,0,.5); color:#fff; font-size:16px; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+  .player-wrap.maximized .closeMaxBtn{ display:flex; }
   .player-wrap .novideo{ color:#8a8272; font-family:"Helvetica Neue", Arial, sans-serif; font-size:14px; z-index:1; }
 
   .custom-controls{ display:flex; align-items:center; gap:12px; padding:14px 20px 4px; font-family:"Helvetica Neue", Arial, sans-serif; }
@@ -446,7 +459,7 @@ function buildWeek(week, index){
     <div class="video-card">
       <div class="player-wrap" id="wrap-${index}">
         ${hasVideo
-          ? `<div id="yt-${index}"></div><div class="player-shield" title="Тоглуулах/Түр зогсоох товчийг ашиглана уу"></div>`
+          ? `<div id="yt-${index}"></div><div class="player-shield" title="Тоглуулах/Түр зогсоох товчийг ашиглана уу"></div><button class="closeMaxBtn" id="closeMax-${index}" type="button" title="Хаах">✕</button>`
           : `<span class="novideo">Энэ сургалтын бичлэг удахгvй нэмэгдэнэ</span>`}
       </div>
       <div class="custom-controls">
@@ -548,12 +561,21 @@ function initPlayer(index, week){
   });
 
   document.getElementById("fs-" + index).addEventListener("click", () => {
-    const wrap = document.getElementById("wrap-" + index);
-    if(wrap.requestFullscreen){ wrap.requestFullscreen(); }
-    else if(wrap.webkitRequestFullscreen){ wrap.webkitRequestFullscreen(); }
-    else if(wrap.msRequestFullscreen){ wrap.msRequestFullscreen(); }
+    document.getElementById("wrap-" + index).classList.add("maximized");
+    document.body.style.overflow = "hidden";
+  });
+  document.getElementById("closeMax-" + index).addEventListener("click", () => {
+    document.getElementById("wrap-" + index).classList.remove("maximized");
+    document.body.style.overflow = "";
   });
 }
+
+document.addEventListener("keydown", (e) => {
+  if(e.key === "Escape"){
+    document.querySelectorAll(".player-wrap.maximized").forEach((w) => w.classList.remove("maximized"));
+    document.body.style.overflow = "";
+  }
+});
 
 // Урагшлуулж гvйлгэхээс хамгаалах "snap back" — 400мс тутам шалгана
 setInterval(() => {

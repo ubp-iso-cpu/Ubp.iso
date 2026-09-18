@@ -53,7 +53,7 @@
     background:var(--card); border:1px solid var(--line); border-radius:6px;
     padding:18px 20px; margin-bottom:16px;
   }
-  .week-card .row{ display:flex; gap:6px; align-items:center; margin-bottom:12px; }
+  .week-card .row{ display:flex; gap:6px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
   .week-card .row-title{ font-weight:600; font-size:14px; flex:1; }
   .field{ margin-bottom:12px; }
   .field label{ display:block; font-size:12.5px; color:#5a5344; margin:0 0 5px; }
@@ -103,6 +103,7 @@
       <button data-tab="site">Сайтын текст</button>
       <button data-tab="orgs">Алба / Тушаал</button>
       <button data-tab="report">Тайлан</button>
+      <button data-tab="password">Нууц vг</button>
     </div>
 
     <!-- Сургалтууд -->
@@ -178,6 +179,27 @@
         <span class="status" id="reportStatus"></span>
       </div>
       <div id="reportBody"></div>
+    </section>
+
+    <!-- Нууц vг -->
+    <section class="tabpanel" id="tab-password">
+      <div class="week-card" style="max-width:420px;">
+        <div class="field">
+          <label>Шинэ нууц vг</label>
+          <input type="password" id="newPasswordInput" placeholder="Дор хаяж 8 тэмдэгт, vсэг+тоо">
+        </div>
+        <div class="field">
+          <label>Шинэ нууц vг давтах</label>
+          <input type="password" id="newPasswordConfirm">
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="btn" id="changePasswordBtn" type="button">Нууц vг солих</button>
+        <span class="status" id="passwordStatus"></span>
+      </div>
+      <p style="font-size:12.5px;color:#8a8272;margin-top:8px;">
+        Нууц vг дор хаяж 8 тэмдэгттэй, наад зах нь нэг vсэг болон нэг тоо агуулсан байх ёстой.
+      </p>
     </section>
   </div>
 </main>
@@ -266,6 +288,8 @@ function renderWeeks(){
     card.innerHTML = `
       <div class="row">
         <span class="row-title">${i+1}-р сургалт</span>
+        <button class="btn secondary" type="button" data-action="moveUp" data-i="${i}" ${i===0 ? "disabled" : ""} title="Дээш зөөх">▲</button>
+        <button class="btn secondary" type="button" data-action="moveDown" data-i="${i}" ${i===weeks.length-1 ? "disabled" : ""} title="Доош зөөх">▼</button>
         <button class="btn danger" type="button" data-action="remove" data-i="${i}">Устгах</button>
       </div>
       <div class="field">
@@ -347,6 +371,20 @@ weekList.addEventListener("click", (e) => {
     const i = Number(e.target.getAttribute("data-i"));
     if(confirm("Энэ сургалтыг устгах уу?")){
       weeks.splice(i, 1);
+      renderWeeks();
+    }
+  }
+  if(action === "moveUp"){
+    const i = Number(e.target.getAttribute("data-i"));
+    if(i > 0){
+      [weeks[i-1], weeks[i]] = [weeks[i], weeks[i-1]];
+      renderWeeks();
+    }
+  }
+  if(action === "moveDown"){
+    const i = Number(e.target.getAttribute("data-i"));
+    if(i < weeks.length - 1){
+      [weeks[i], weeks[i+1]] = [weeks[i+1], weeks[i]];
       renderWeeks();
     }
   }
@@ -515,6 +553,51 @@ function renderReport(summary){
 
   body.innerHTML = kpiHtml + tableHtml;
 }
+
+/* ---------- Нууц vг солих ---------- */
+function validatePasswordStrength(pw){
+  if(pw.length < 8) return "Нууц vг дор хаяж 8 тэмдэгт байх ёстой.";
+  if(!/[a-zA-Z]/.test(pw)) return "Нууц vг наад зах нь нэг vсэг агуулсан байх ёстой.";
+  if(!/[0-9]/.test(pw)) return "Нууц vг наад зах нь нэг тоо агуулсан байх ёстой.";
+  return null;
+}
+
+document.getElementById("changePasswordBtn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("passwordStatus");
+  const pw1 = document.getElementById("newPasswordInput").value;
+  const pw2 = document.getElementById("newPasswordConfirm").value;
+
+  if(pw1 !== pw2){
+    statusEl.textContent = "Хоёр нууц vг таарахгvй байна.";
+    statusEl.className = "status err";
+    return;
+  }
+  const weak = validatePasswordStrength(pw1);
+  if(weak){
+    statusEl.textContent = weak;
+    statusEl.className = "status err";
+    return;
+  }
+
+  statusEl.textContent = "Хадгалж байна...";
+  statusEl.className = "status";
+  try{
+    const data = await callAppsScript({ action: "changePassword", password: ADMIN_PASSWORD, newPassword: pw1 });
+    if(!data.ok){
+      statusEl.textContent = data.message || (data.error === "unauthorized" ? "Одоогийн нэвтрэлт хvчингvй боллоо, дахин нэвтэрнэ vv." : "Алдаа гарлаа.");
+      statusEl.className = "status err";
+      return;
+    }
+    ADMIN_PASSWORD = pw1;
+    document.getElementById("newPasswordInput").value = "";
+    document.getElementById("newPasswordConfirm").value = "";
+    statusEl.textContent = "Нууц vг амжилттай солигдлоо.";
+    statusEl.className = "status ok";
+  }catch(e){
+    statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";
+    statusEl.className = "status err";
+  }
+});
 
 /* ---------- Login ---------- */
 async function tryLogin(){

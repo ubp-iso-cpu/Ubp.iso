@@ -513,6 +513,19 @@ function initPlayer(index, week){
           renderUnlocked(index, week, btnEl);
           if(!wasDone) logProgressEvent("video_completed", week.id);
         }
+      },
+      onError: (e) => {
+        const codeMsg = {
+          2: "Видеоны ID буруу байна.",
+          5: "Тоглуулагчид алдаа гарлаа.",
+          100: "Видео олдсонгvй эсвэл устгагдсан байна.",
+          101: "Энэ видеог өөр сайт дээр тоглуулахыг зөвшөөрөөгvй байна (embedding хаалттай).",
+          150: "Энэ видеог өөр сайт дээр тоглуулахыг зөвшөөрөөгvй байна (embedding хаалттай).",
+        }[e.data] || ("Тодорхойгvй алдаа (код: " + e.data + ")");
+        const wrap = document.getElementById("wrap-" + index);
+        if(wrap){
+          wrap.innerHTML = `<div style="color:#f3efe4; font-family:'Helvetica Neue',Arial,sans-serif; font-size:14px; text-align:center; padding:20px;">Видео тоглуулахад алдаа гарлаа:<br>${codeMsg}</div>`;
+        }
       }
     }
   });
@@ -641,9 +654,7 @@ async function loadWeeks(){
   submitBtn.textContent = "Vргэлжлvvлэх";
   WEEKS.forEach(buildWeek);
   if(WEEKS.length) selectWeek(0);
-  if(ytApiReady){
-    WEEKS.forEach((week, index) => initPlayer(index, week));
-  }
+  tryInitPlayers();
 
   // Нээгдэх/хаагдах хугацаа шилжсэн vед (жишээ нь хvлээж байтал цонх нээгдэх vед)
   // хуудсыг дахин ачаалж, зөв тєлєвийг харуулна.
@@ -653,12 +664,34 @@ async function loadWeeks(){
   }, 60000);
 }
 
+// WEEKS болон YouTube API хоёр өөр цагт бэлэн болдог (кэш ашиглах vед синхрон,
+// сvлжээгээр татах vед async) тул аль аль тал нь энэ нэг функцийг дуудна;
+// _initTried flag-аар давхар vvсгэхээс сэргийлж, хэдэн ч удаа дуудаж болно.
+function tryInitPlayers(){
+  if(!ytApiReady || !WEEKS.length) return;
+  WEEKS.forEach((week, index) => {
+    const rec = players[index];
+    if(rec && !rec.ytPlayer && !rec._initTried && week.youtubeId && week._status === "open"){
+      rec._initTried = true;
+      initPlayer(index, week);
+    }
+  });
+}
+
 window.onYouTubeIframeAPIReady = function(){
   ytApiReady = true;
-  if(WEEKS.length){
-    WEEKS.forEach((week, index) => initPlayer(index, week));
-  }
+  tryInitPlayers();
 };
+
+// Аюулгvйн нөөц: ямар нэг шалтгаанаар player vvсгэгдээгvй vлдвэл (жишээ нь
+// YouTube API-ийн ready эвент саатсан) 1.5 секунд тутам 10 секундийн турш
+// дахин оролдоно.
+let _initRetryCount = 0;
+const _initRetryTimer = setInterval(() => {
+  _initRetryCount++;
+  tryInitPlayers();
+  if(_initRetryCount >= 7) clearInterval(_initRetryTimer);
+}, 1500);
 
 /* ---------- Эхлэл ---------- */
 const identity = loadIdentity();

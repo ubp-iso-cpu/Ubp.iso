@@ -76,6 +76,17 @@
     position:fixed; inset:0; width:100vw; height:100vh; aspect-ratio:auto;
     z-index:1000; border-radius:0;
   }
+  /* Босоо (portrait) утсан дээр видеог хэвтээ болгож эргvvлж, бvтэн дэлгэцийг дvvргэнэ */
+  .player-wrap.maximized.rotated{
+    top:50%; left:50%; right:auto; bottom:auto;
+    width:100vh; height:100vw;
+    transform:translate(-50%, -50%) rotate(90deg);
+    transform-origin:center center;
+  }
+  .player-wrap.maximized.rotated .closeMaxBtn{
+    top:10px; right:auto; left:10px;
+    transform:rotate(-90deg);
+  }
   .player-wrap .closeMaxBtn{
     display:none; position:absolute; top:10px; right:10px; z-index:1001;
     width:34px; height:34px; border-radius:50%; border:1px solid rgba(255,255,255,.35);
@@ -561,19 +572,38 @@ function initPlayer(index, week){
   });
 
   document.getElementById("fs-" + index).addEventListener("click", () => {
-    document.getElementById("wrap-" + index).classList.add("maximized");
+    const wrap = document.getElementById("wrap-" + index);
+    wrap.classList.add("maximized");
+    updateRotation(wrap);
     document.body.style.overflow = "hidden";
   });
   document.getElementById("closeMax-" + index).addEventListener("click", () => {
-    document.getElementById("wrap-" + index).classList.remove("maximized");
-    document.body.style.overflow = "";
+    exitMaximize(document.getElementById("wrap-" + index));
   });
 }
 
+// Босоо (portrait) утастай vед видеог хэвтээ болгож эргvvлнэ; хэрэглэгч
+// утсаа биечлэн хэвтvvлбэл (жинхэнэ landscape) эргvvлэхийг арилгана.
+function isPortrait(){
+  return window.matchMedia && window.matchMedia("(orientation: portrait)").matches;
+}
+function updateRotation(wrap){
+  if(!wrap || !wrap.classList.contains("maximized")) return;
+  wrap.classList.toggle("rotated", isPortrait());
+}
+function exitMaximize(wrap){
+  if(!wrap) return;
+  wrap.classList.remove("maximized", "rotated");
+  document.body.style.overflow = "";
+}
+
+window.addEventListener("resize", () => {
+  document.querySelectorAll(".player-wrap.maximized").forEach(updateRotation);
+});
+
 document.addEventListener("keydown", (e) => {
   if(e.key === "Escape"){
-    document.querySelectorAll(".player-wrap.maximized").forEach((w) => w.classList.remove("maximized"));
-    document.body.style.overflow = "";
+    document.querySelectorAll(".player-wrap.maximized").forEach(exitMaximize);
   }
 });
 

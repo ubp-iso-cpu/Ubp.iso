@@ -690,7 +690,28 @@ let _initRetryCount = 0;
 const _initRetryTimer = setInterval(() => {
   _initRetryCount++;
   tryInitPlayers();
-  if(_initRetryCount >= 7) clearInterval(_initRetryTimer);
+  if(_initRetryCount >= 7){
+    clearInterval(_initRetryTimer);
+    // 10 секундийн дараа ч ytApiReady болоогvй бол YouTube тухайн сvлжээнд
+    // хаагдсан (эсвэл ачаалагдаагvй) гэж vзэж, ойлгомжтой мэдэгдэл харуулна.
+    if(!ytApiReady){
+      WEEKS.forEach((week, index) => {
+        const rec = players[index];
+        if(rec && !rec.ytPlayer && week.youtubeId && week._status === "open"){
+          const wrap = document.getElementById("wrap-" + index);
+          if(wrap){
+            wrap.innerHTML = `
+              <div style="color:#f3efe4; font-family:'Helvetica Neue',Arial,sans-serif; font-size:13.5px; text-align:center; padding:24px 18px; line-height:1.5;">
+                Видео ачаалагдахгvй байна.<br>
+                Магадгvй танай интернэт/сvлжээ YouTube-г хаасан байж болзошгvй.<br>
+                Гэрийн сvлжээ, гар утасны интернэт зэргээр дахин оролдоно уу.<br>
+                <a href="https://www.youtube.com/watch?v=${week.youtubeId}" target="_blank" rel="noopener" style="color:#9fd6b8;">YouTube дээр шууд нээх</a>
+              </div>`;
+          }
+        }
+      });
+    }
+  }
 }, 1500);
 
 /* ---------- Эхлэл ---------- */

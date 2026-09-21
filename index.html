@@ -696,12 +696,12 @@ async function loadWeeks(){
       return;
     }
   }
+  applySiteConfig(bundle.site);
   if(bundle.site && bundle.site.siteActive === "false"){
     showInactiveState(bundle.site.inactiveMessage || "Энэ систем одоогоор идэвхгvй байна. Дараа дахин орж vзнэ vv.");
     return;
   }
   WEEKS = bundle.weeks || [];
-  applySiteConfig(bundle.site);
   setupOrgSelects(bundle.org || []);
   const submitBtn = document.getElementById("loginSubmitBtn");
   submitBtn.disabled = false;

@@ -602,9 +602,17 @@ function renderReport(summary){
   `;
 
   const people = summary.people || [];
+  const orgNames = (summary.byOrg || []).map(r => r.org).sort();
   let detailHtml = `
     <h3 style="font-family:Georgia,serif; font-size:16px; margin:26px 0 10px;">Хvн бvрийн дэлгэрэнгvй (алба удирдлагад илгээхэд)</h3>
-    <input type="text" id="peopleFilter" placeholder="Алба, тушаал эсвэл нэрээр хайх..." style="width:100%; max-width:360px; padding:9px 11px; border:1px solid var(--line); border-radius:5px; font-size:14px; font-family:inherit; margin-bottom:10px;">
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+      <select id="peopleOrgFilter" style="padding:9px 11px; border:1px solid var(--line); border-radius:5px; font-size:14px; font-family:inherit;">
+        <option value="">-- Бvх алба, нэгж --</option>
+        ${orgNames.map(o => `<option value="${escapeAttr(o)}">${escapeHtml(o)}</option>`).join("")}
+      </select>
+      <input type="text" id="peopleFilter" placeholder="Тушаал эсвэл нэрээр хайх..." style="flex:1; min-width:200px; max-width:320px; padding:9px 11px; border:1px solid var(--line); border-radius:5px; font-size:14px; font-family:inherit;">
+    </div>
+    <p class="status ok" id="orgFilterSummary" style="margin:-4px 0 10px;"></p>
     <table id="peopleTable">
       <thead>
         <tr>
@@ -616,7 +624,7 @@ function renderReport(summary){
       </thead>
       <tbody>
         ${people.map(p => `
-          <tr data-filter="${escapeAttr((p.org + " " + p.position + " " + p.name).toLowerCase())}">
+          <tr data-org="${escapeAttr(p.org)}" data-filter="${escapeAttr((p.position + " " + p.name).toLowerCase())}">
             <td>${escapeHtml(p.org)}</td>
             <td>${escapeHtml(p.position || "")}</td>
             <td>${escapeHtml(p.name)}</td>
@@ -629,15 +637,31 @@ function renderReport(summary){
 
   body.innerHTML = kpiHtml + tableHtml + detailHtml;
 
+  const orgFilterSelect = document.getElementById("peopleOrgFilter");
   const filterInput = document.getElementById("peopleFilter");
-  if(filterInput){
-    filterInput.addEventListener("input", () => {
-      const q = filterInput.value.trim().toLowerCase();
-      document.querySelectorAll("#peopleTable tbody tr").forEach((tr) => {
-        tr.hidden = q && !tr.getAttribute("data-filter").includes(q);
-      });
+  const summaryEl = document.getElementById("orgFilterSummary");
+  const byOrgMap = {};
+  (summary.byOrg || []).forEach(r => { byOrgMap[r.org] = r; });
+
+  function applyPeopleFilter(){
+    const selectedOrg = orgFilterSelect.value;
+    const q = filterInput.value.trim().toLowerCase();
+    document.querySelectorAll("#peopleTable tbody tr").forEach((tr) => {
+      const orgMatch = !selectedOrg || tr.getAttribute("data-org") === selectedOrg;
+      const textMatch = !q || tr.getAttribute("data-filter").includes(q);
+      tr.hidden = !(orgMatch && textMatch);
     });
+    if(selectedOrg && byOrgMap[selectedOrg]){
+      const row = byOrgMap[selectedOrg];
+      const perWeekStr = weekIds.map((id, i) => `С${i+1}: ${row.perWeek[id] || 0}`).join(", ");
+      summaryEl.textContent = `${selectedOrg} — Бvртгvvлсэн: ${row.participants} хvн. ${perWeekStr}`;
+    } else {
+      summaryEl.textContent = "";
+    }
   }
+
+  if(orgFilterSelect) orgFilterSelect.addEventListener("change", applyPeopleFilter);
+  if(filterInput) filterInput.addEventListener("input", applyPeopleFilter);
 }
 
 /* ---------- Нууц vг солих ---------- */

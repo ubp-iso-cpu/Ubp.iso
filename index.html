@@ -678,6 +678,12 @@ async function loadWeeks(){
 // сvлжээгээр татах vед async) тул аль аль тал нь энэ нэг функцийг дуудна;
 // _initTried flag-аар давхар vvсгэхээс сэргийлж, хэдэн ч удаа дуудаж болно.
 function tryInitPlayers(){
+  // Зарим тохиолдолд onYouTubeIframeAPIReady дуудагдахгvй ч YT vнэндээ
+  // бэлэн байдаг тул (жишээ нь extension саад учруулж эвент алдагдвал ч)
+  // шууд шалгаж нөхцөлийг сэргээнэ.
+  if(!ytApiReady && typeof YT !== "undefined" && YT && YT.Player){
+    ytApiReady = true;
+  }
   if(!ytApiReady || !WEEKS.length) return;
   WEEKS.forEach((week, index) => {
     const rec = players[index];
@@ -694,16 +700,14 @@ window.onYouTubeIframeAPIReady = function(){
 };
 
 // Аюулгvйн нөөц: ямар нэг шалтгаанаар player vvсгэгдээгvй vлдвэл (жишээ нь
-// YouTube API-ийн ready эвент саатсан) 1.5 секунд тутам 10 секундийн турш
+// YouTube API-ийн ready эвент саатсан) 1.5 секунд тутам 24 секундийн турш
 // дахин оролдоно.
 let _initRetryCount = 0;
 const _initRetryTimer = setInterval(() => {
   _initRetryCount++;
   tryInitPlayers();
-  if(_initRetryCount >= 7){
+  if(_initRetryCount >= 16){
     clearInterval(_initRetryTimer);
-    // 10 секундийн дараа ч ytApiReady болоогvй бол YouTube тухайн сvлжээнд
-    // хаагдсан (эсвэл ачаалагдаагvй) гэж vзэж, ойлгомжтой мэдэгдэл харуулна.
     if(!ytApiReady){
       WEEKS.forEach((week, index) => {
         const rec = players[index];
@@ -712,9 +716,9 @@ const _initRetryTimer = setInterval(() => {
           if(wrap){
             wrap.innerHTML = `
               <div style="color:#f3efe4; font-family:'Helvetica Neue',Arial,sans-serif; font-size:13.5px; text-align:center; padding:24px 18px; line-height:1.5;">
-                Видео ачаалагдахгvй байна.<br>
-                Магадгvй танай интернэт/сvлжээ YouTube-г хаасан байж болзошгvй.<br>
-                Гэрийн сvлжээ, гар утасны интернэт зэргээр дахин оролдоно уу.<br>
+                Видео ачаалахад удаж байна.<br>
+                Интернэт холболт удаан эсвэл YouTube хандалт хязгаарлагдсан байж болзошгvй.<br>
+                <button class="btn" type="button" onclick="location.reload()" style="margin-top:10px;">Дахин ачаалах</button><br><br>
                 <a href="https://www.youtube.com/watch?v=${week.youtubeId}" target="_blank" rel="noopener" style="color:#9fd6b8;">YouTube дээр шууд нээх</a>
               </div>`;
           }

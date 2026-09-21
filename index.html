@@ -198,7 +198,7 @@
 
 <main>
   <nav class="weeks" id="weekNav"></nav>
-  <div id="panels"></div>
+  <div id="panels"><p style="font-family:'Helvetica Neue',Arial,sans-serif;color:#8a8272;font-size:14px;padding:20px 0;">Ачаалж байна...</p></div>
 
   <p class="note" id="footerNoteEl">
     Асуудал гарвал ажлын байрны админтай холбогдоно уу. Бичлэг болон формын холбоосыг админ хэсгээс
@@ -662,6 +662,7 @@ async function loadWeeks(){
   const submitBtn = document.getElementById("loginSubmitBtn");
   submitBtn.disabled = false;
   submitBtn.textContent = "Vргэлжлvvлэх";
+  panels.innerHTML = "";
   WEEKS.forEach(buildWeek);
   if(WEEKS.length) selectWeek(0);
   tryInitPlayers();

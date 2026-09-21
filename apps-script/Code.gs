@@ -103,7 +103,13 @@ function readSite() {
   const site = Object.assign({}, DEFAULT_SITE);
   rows.forEach((r) => {
     const key = String(r[0] || "");
-    if (key) site[key] = String(r[1] || "");
+    // Google Sheets "true"/"false" текстийг автоматаар boolean төрөл болгож
+    // хувиргадаг тул (r[1] || "") ашиглавал "false"(boolean) хоосон мөр болж
+    // алдагддаг — үvнээс сэргийлж boolean утгыг эхлээд шалгана.
+    if (key) {
+      const v = r[1];
+      site[key] = typeof v === "boolean" ? String(v) : String(v || "");
+    }
   });
   return site;
 }

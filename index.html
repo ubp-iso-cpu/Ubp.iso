@@ -406,7 +406,7 @@ function renderUnlocked(index, week, btn){
   const unlockBox = document.getElementById("unlock-" + index);
   unlockBox.classList.remove("locked");
   const formLink = week.formUrl
-    ? `<a class="btn" href="${week.formUrl}" target="_blank" rel="noopener">Форм бөглөх</a>`
+    ? `<a class="btn" href="${escapeAttr(week.formUrl)}" target="_blank" rel="noopener">Форм бөглөх</a>`
     : `<button class="btn" disabled>Форм холбоос тохируулаагvй</button>`;
   unlockBox.innerHTML = `
     <div class="msg"><b>Бичлэг үзэж дууссан</b>Одоо мэдлэгийн сорилыг бөглөж болно.</div>
@@ -421,7 +421,7 @@ function showEndOverlay(index, week){
   const overlay = document.getElementById("endOverlay-" + index);
   if(!overlay) return;
   const formLink = week.formUrl
-    ? `<a class="btn" href="${week.formUrl}" target="_blank" rel="noopener">Форм бөглөх</a>`
+    ? `<a class="btn" href="${escapeAttr(week.formUrl)}" target="_blank" rel="noopener">Форм бөглөх</a>`
     : `<button class="btn" disabled>Форм холбоос тохируулаагvй</button>`;
   overlay.innerHTML = `<b>Бичлэг vзэж дууссан</b>${formLink}`;
   overlay.classList.add("show");
@@ -447,8 +447,8 @@ function buildWeek(week, index){
     panel.innerHTML = `
       <div class="video-card">
         <div class="video-meta" style="padding-top:20px;">
-          <h2>${week.title}</h2>
-          <p class="desc">${week.desc || ""}</p>
+          <h2>${escapeHtml(week.title)}</h2>
+          <p class="desc">${escapeHtml(week.desc || "")}</p>
           <div class="unlock-box locked">
             <div class="msg"><b>Энэ сургалт удахгvй нээгдэнэ</b>Нээгдэх хугацаа: ${formatDateTime(week.opensAt)}</div>
           </div>
@@ -464,8 +464,8 @@ function buildWeek(week, index){
     panel.innerHTML = `
       <div class="video-card">
         <div class="video-meta" style="padding-top:20px;">
-          <h2>${week.title}</h2>
-          <p class="desc">${week.desc || ""}</p>
+          <h2>${escapeHtml(week.title)}</h2>
+          <p class="desc">${escapeHtml(week.desc || "")}</p>
           <div class="unlock-box locked">
             <div class="msg"><b>Энэ сургалтын хугацаа дууссан</b>${week.closesAt ? formatDateTime(week.closesAt) + " хvртэл нээлттэй байсан." : ""}</div>
           </div>
@@ -493,8 +493,8 @@ function buildWeek(week, index){
         <button class="iconbtn" id="fs-${index}" ${hasVideo ? "" : "disabled"} title="Дэлгэц томруулах">⛶</button>
       </div>
       <div class="video-meta">
-        <h2>${week.title}</h2>
-        <p class="desc">${week.desc || ""}</p>
+        <h2>${escapeHtml(week.title)}</h2>
+        <p class="desc">${escapeHtml(week.desc || "")}</p>
         <div class="status-row"><span class="hint">${week.closesAt ? "Хугацаа: " + formatDateTime(week.closesAt) + " хvртэл. " : ""}Бичлэгийг зөвхөн дуустал урагшлуулж болохгvй, зөвхөн тоглуулах/зогсоох боломжтой.</span></div>
         <div class="unlock-box locked" id="unlock-${index}">
           <div class="msg"><b>Форм түгжигдсэн байна</b>Бичлэгийг дуустал үзсэний дараа мэдлэгийн сорил нээгдэнэ.</div>
@@ -508,6 +508,7 @@ function buildWeek(week, index){
   if(state.done){
     const btnEl = document.querySelector("#weekNav button:nth-child(" + (index+1) + ")");
     renderUnlocked(index, week, btnEl);
+    showEndOverlay(index, week);
   }
 
   players[index] = { maxTime: state.maxTime || 0, done: state.done, duration: 0, ytPlayer: null, weekId: week.id };

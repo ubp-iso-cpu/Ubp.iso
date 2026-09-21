@@ -71,7 +71,16 @@
     display:flex; align-items:center; justify-content:center;
   }
   .player-wrap iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
-  .player-wrap .player-shield{ position:absolute; inset:0; background:transparent; }
+  .player-wrap .player-shield{ position:absolute; inset:0; background:transparent; cursor:pointer; }
+  .player-wrap .endOverlay{
+    display:none; position:absolute; inset:0; z-index:20;
+    background:rgba(16,22,20,.88);
+    align-items:center; justify-content:center; text-align:center;
+    padding:24px; font-family:"Helvetica Neue", Arial, sans-serif;
+  }
+  .player-wrap .endOverlay.show{ display:flex; flex-direction:column; }
+  .player-wrap .endOverlay b{ display:block; color:#fff; font-size:17px; margin-bottom:14px; }
+  .player-wrap .endOverlay .btn{ margin:0 auto; }
   /* iOS зэрэг олон гар утсан дээр div/iframe-ийн жинхэнэ Fullscreen API
      тогтворгvй тул CSS-д суурилсан "томруулах" горим ашиглана */
   .player-wrap.maximized{
@@ -406,6 +415,18 @@ function renderUnlocked(index, week, btn){
   btn.classList.add("done");
 }
 
+// Видео дуусмагц форм товчийг шууд видеоны дээр харуулна (доош гvйлгэж
+// хайх шаардлагагvй болгоно).
+function showEndOverlay(index, week){
+  const overlay = document.getElementById("endOverlay-" + index);
+  if(!overlay) return;
+  const formLink = week.formUrl
+    ? `<a class="btn" href="${week.formUrl}" target="_blank" rel="noopener">Форм бөглөх</a>`
+    : `<button class="btn" disabled>Форм холбоос тохируулаагvй</button>`;
+  overlay.innerHTML = `<b>Бичлэг vзэж дууссан</b>${formLink}`;
+  overlay.classList.add("show");
+}
+
 function buildWeek(week, index){
   const state = loadProgress(week.id);
   const status = getWeekStatus(week);
@@ -461,7 +482,7 @@ function buildWeek(week, index){
     <div class="video-card">
       <div class="player-wrap" id="wrap-${index}">
         ${hasVideo
-          ? `<div id="yt-${index}"></div><div class="player-shield" title="Тоглуулах/Түр зогсоох товчийг ашиглана уу"></div><button class="closeMaxBtn" id="closeMax-${index}" type="button" title="Хаах">✕</button>`
+          ? `<div id="yt-${index}"></div><div class="player-shield" id="shield-${index}" title="Тоглуулах/Түр зогсоох"></div><div class="endOverlay" id="endOverlay-${index}"></div><button class="closeMaxBtn" id="closeMax-${index}" type="button" title="Хаах">✕</button>`
           : `<span class="novideo">Энэ сургалтын бичлэг удахгvй нэмэгдэнэ</span>`}
       </div>
       <div class="custom-controls">
@@ -526,6 +547,7 @@ function initPlayer(index, week){
           saveProgress(players[index].weekId, { maxTime: players[index].maxTime, done: true });
           const btnEl = document.querySelectorAll("#weekNav button")[index];
           renderUnlocked(index, week, btnEl);
+          showEndOverlay(index, week);
           if(!wasDone) logProgressEvent("video_completed", week.id);
         }
       },
@@ -545,11 +567,17 @@ function initPlayer(index, week){
     }
   });
 
-  document.getElementById("play-" + index).addEventListener("click", () => {
+  function togglePlay(){
     const state = p.getPlayerState();
     if(state === YT.PlayerState.PLAYING){ p.pauseVideo(); }
     else { p.playVideo(); }
-  });
+  }
+  document.getElementById("play-" + index).addEventListener("click", togglePlay);
+  // Хэрэглэгчид видео дэлгэц дээр шууд дарж болдог болгоно (зөвхөн жижиг ▶
+  // товч дарах шаардлагагvй) — YouTube-ийн poster/thumbnail дээр дарахад ажиллахгvй
+  // байх гэсэн гомдол буурна.
+  const shieldEl = document.getElementById("shield-" + index);
+  if(shieldEl) shieldEl.addEventListener("click", togglePlay);
 
   let ccOn = true;
   const ccBtn = document.getElementById("cc-" + index);

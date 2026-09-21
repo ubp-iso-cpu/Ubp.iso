@@ -611,23 +611,8 @@ setInterval(() => {
 }, 400);
 
 // Google Apps Script заримдаа удаан хариу өгдөг (ялангуяа олон хvн зэрэг орох vед)
-// тул дахин оролдох логик болон богино хугацааны кэш ашиглаж тогтвортой болгоно.
-const BUNDLE_CACHE_KEY = "iso_ayan_bundle_cache";
-const BUNDLE_CACHE_TTL_MS = 5 * 60 * 1000;
-
-function loadCachedBundle(){
-  try{
-    const raw = sessionStorage.getItem(BUNDLE_CACHE_KEY);
-    if(!raw) return null;
-    const cached = JSON.parse(raw);
-    if(Date.now() - cached.ts > BUNDLE_CACHE_TTL_MS) return null;
-    return cached.data;
-  }catch(e){ return null; }
-}
-function saveCachedBundle(data){
-  try{ sessionStorage.setItem(BUNDLE_CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); }catch(e){}
-}
-
+// тул дахин оролдох логик ашиглаж тогтвортой болгоно. Кэш ашигладаггvй —
+// админ өгөгдөл шинэчлэх бvрд бvх хэрэглэгч шууд шинэ мэдээлэл харна.
 async function fetchBundleWithRetry(maxAttempts){
   let lastErr;
   for(let attempt = 1; attempt <= maxAttempts; attempt++){
@@ -649,11 +634,10 @@ async function fetchBundleWithRetry(maxAttempts){
 }
 
 async function loadWeeks(){
-  let bundle = loadCachedBundle();
-  if(!bundle){
+  let bundle;
+  {
     try{
       bundle = await fetchBundleWithRetry(3);
-      saveCachedBundle(bundle);
     }catch(e){
       const errMsg = "Мэдээлэл татахад алдаа гарлаа (сvлжээ удаан байж болзошгvй). Дахин оролдоно уу.";
       panels.innerHTML = `

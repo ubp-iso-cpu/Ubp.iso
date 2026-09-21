@@ -126,6 +126,22 @@
 
     <!-- Сайтын текст -->
     <section class="tabpanel" id="tab-site">
+      <div class="week-card" style="border-color:#cfe1d7;">
+        <div class="field" style="margin-bottom:0;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="site-siteActive" style="width:16px;height:16px;">
+            <span style="font-weight:600; color:var(--ink);">Сайт идэвхтэй (ажилтнуудад нээлттэй)</span>
+          </label>
+          <p class="hint" style="margin-top:6px;">
+            Идэвхгvй болговол ажилтнуудад видео/форм харагдахгvй, зөвхөн доорх мессеж харагдана.
+            Танд (админ) admin.html хэвээр ажиллана.
+          </p>
+        </div>
+        <div class="field" style="margin-top:12px;">
+          <label>Идэвхгvй vеийн мессеж</label>
+          <textarea id="site-inactiveMessage"></textarea>
+        </div>
+      </div>
       <div class="week-card">
         <div class="field">
           <label>Нvvр хуудасны гарчиг</label>
@@ -434,6 +450,8 @@ document.getElementById("saveWeeksBtn").addEventListener("click", async () => {
 
 /* ---------- Site text ---------- */
 function renderSite(){
+  document.getElementById("site-siteActive").checked = siteConfig.siteActive !== "false";
+  document.getElementById("site-inactiveMessage").value = siteConfig.inactiveMessage || "";
   document.getElementById("site-pageTitle").value = siteConfig.pageTitle || "";
   document.getElementById("site-pageIntro").value = siteConfig.pageIntro || "";
   document.getElementById("site-loginTitle").value = siteConfig.loginTitle || "";
@@ -444,6 +462,8 @@ function renderSite(){
 document.getElementById("saveSiteBtn").addEventListener("click", async () => {
   const statusEl = document.getElementById("siteStatus");
   const site = {
+    siteActive: document.getElementById("site-siteActive").checked ? "true" : "false",
+    inactiveMessage: document.getElementById("site-inactiveMessage").value,
     pageTitle: document.getElementById("site-pageTitle").value,
     pageIntro: document.getElementById("site-pageIntro").value,
     loginTitle: document.getElementById("site-loginTitle").value,

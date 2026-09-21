@@ -663,6 +663,16 @@ async function fetchBundleWithRetry(maxAttempts){
   throw lastErr;
 }
 
+function showInactiveState(message){
+  document.getElementById("loginOverlay").hidden = true;
+  document.getElementById("whoami").hidden = true;
+  nav.innerHTML = "";
+  panels.innerHTML = `
+    <div style="font-family:'Helvetica Neue',Arial,sans-serif; text-align:center; padding:60px 20px; color:#5a5344;">
+      <p style="font-size:16px; line-height:1.6;">${escapeHtml(message)}</p>
+    </div>`;
+}
+
 async function loadWeeks(){
   let bundle;
   {
@@ -685,6 +695,10 @@ async function loadWeeks(){
       document.getElementById("loginErr").hidden = false;
       return;
     }
+  }
+  if(bundle.site && bundle.site.siteActive === "false"){
+    showInactiveState(bundle.site.inactiveMessage || "Энэ систем одоогоор идэвхгvй байна. Дараа дахин орж vзнэ vv.");
+    return;
   }
   WEEKS = bundle.weeks || [];
   applySiteConfig(bundle.site);

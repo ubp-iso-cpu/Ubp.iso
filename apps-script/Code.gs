@@ -19,6 +19,8 @@ const DEFAULT_SITE = {
   loginTitle: "Тавтай морил",
   loginIntro: "ISO идэвхжvvлэлтийн аяны сургалтад орохын өмнө алба/нэгж, албан тушаал болон өөрийн нэрээ оруулна уу.",
   footerNote: "Асуудал гарвал ажлын байрны админтай холбогдоно уу.",
+  siteActive: "true",
+  inactiveMessage: "Энэ систем одоогоор идэвхгvй байна. Дараа дахин орж vзнэ vv.",
 };
 
 function getSs() {
@@ -142,6 +144,12 @@ function writeOrg(rows) {
 /* ---------- Progress (event log) ---------- */
 const PROGRESS_COLUMNS = ["timestamp", "org", "position", "name", "weekId", "event"];
 
+function resetProgress() {
+  const sheet = getOrCreateSheet(SHEET_PROGRESS, PROGRESS_COLUMNS);
+  sheet.clearContents();
+  sheet.appendRow(PROGRESS_COLUMNS);
+}
+
 function logProgress(entry) {
   const sheet = getOrCreateSheet(SHEET_PROGRESS, PROGRESS_COLUMNS);
   sheet.appendRow([
@@ -204,12 +212,23 @@ function readProgressSummary() {
     });
   });
 
+  const peopleSorted = peopleList.slice().sort((a, b) => {
+    if (a.org !== b.org) return a.org < b.org ? -1 : 1;
+    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+  });
+
   return {
     weekIds: weekIds,
     weekTitles: weeks.map((w) => w.title),
     totalParticipants: peopleList.length,
     perWeek: perWeek,
     byOrg: Object.keys(byOrg).map((k) => byOrg[k]),
+    people: peopleSorted.map((p) => ({
+      org: p.org,
+      position: p.position,
+      name: p.name,
+      completed: p.completed,
+    })),
   };
 }
 
@@ -223,6 +242,14 @@ function jsonResponse(obj) {
 function checkPassword(body) {
   const adminPassword = PropertiesService.getScriptProperties().getProperty("ADMIN_PASSWORD");
   return !!adminPassword && body.password === adminPassword;
+}
+
+// Хоосон биш буцаах утга нь тохирохгvй шалтгааныг илэрхийлнэ.
+function validatePasswordStrength(pw) {
+  if (pw.length < 8) return "Нууц vг дор хаяж 8 тэмдэгт байх ёстой.";
+  if (!/[a-zA-Z]/.test(pw)) return "Нууц vг наад зах нь нэг vсэг агуулсан байх ёстой.";
+  if (!/[0-9]/.test(pw)) return "Нууц vг наад зах нь нэг тоо агуулсан байх ёстой.";
+  return null;
 }
 
 function doGet(e) {
@@ -257,6 +284,14 @@ function doPost(e) {
     return jsonResponse({ ok: false, error: "unauthorized" });
   }
 
+  if (action === "changePassword") {
+    const newPassword = String(body.newPassword || "");
+    const weak = validatePasswordStrength(newPassword);
+    if (weak) return jsonResponse({ ok: false, error: "weak_password", message: weak });
+    PropertiesService.getScriptProperties().setProperty("ADMIN_PASSWORD", newPassword);
+    return jsonResponse({ ok: true });
+  }
+
   if (action === "saveWeeks") {
     if (!Array.isArray(body.weeks)) return jsonResponse({ ok: false, error: "expected_weeks_array" });
     writeWeeks(body.weeks);
@@ -277,6 +312,11 @@ function doPost(e) {
 
   if (action === "getSummary") {
     return jsonResponse({ ok: true, summary: readProgressSummary() });
+  }
+
+  if (action === "resetProgress") {
+    resetProgress();
+    return jsonResponse({ ok: true });
   }
 
   return jsonResponse({ ok: false, error: "unknown_action" });

@@ -176,8 +176,14 @@
     <section class="tabpanel" id="tab-report">
       <div class="toolbar">
         <button class="btn secondary" id="loadReportBtn" type="button">Тайлан татах</button>
+        <button class="btn danger" id="resetReportBtn" type="button">Тайлан цэвэрлэх (дахин эхлэх)</button>
         <span class="status" id="reportStatus"></span>
       </div>
+      <p style="font-size:12.5px;color:#8a8272;margin:-6px 0 14px;">
+        "Тайлан цэвэрлэх" товч нь бvх бvртгvvлсэн/vзсэн мэдээллийг бvрмөсөн устгаж, тоолуурыг 0-ээс
+        дахин эхлvvлнэ. Тестийн явцад цугласан өгөгдлийг арилгаад, жинхэнэ аяныг цэвэр тоолуураар
+        эхлvvлэхэд ашиглана. Буцаах боломжгvй.
+      </p>
       <div id="reportBody"></div>
     </section>
 
@@ -512,6 +518,28 @@ document.getElementById("loadReportBtn").addEventListener("click", async () => {
     }
     statusEl.textContent = "";
     renderReport(data.summary);
+  }catch(e){
+    statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";
+    statusEl.className = "status err";
+  }
+});
+
+document.getElementById("resetReportBtn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("reportStatus");
+  const confirmed = confirm("Бvх бvртгvvлсэн/vзсэн мэдээллийг бvрмөсөн устгаж, тайланг 0-ээс дахин эхлvvлэх vv? Энэ vйлдлийг буцаах боломжгvй.");
+  if(!confirmed) return;
+  statusEl.textContent = "Цэвэрлэж байна...";
+  statusEl.className = "status";
+  try{
+    const data = await callAppsScript({ action: "resetProgress", password: ADMIN_PASSWORD });
+    if(!data.ok){
+      statusEl.textContent = "Алдаа гарлаа.";
+      statusEl.className = "status err";
+      return;
+    }
+    statusEl.textContent = "Тайлан цэвэрлэгдэж, дахин эхэллээ.";
+    statusEl.className = "status ok";
+    document.getElementById("reportBody").innerHTML = "";
   }catch(e){
     statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";
     statusEl.className = "status err";

@@ -581,7 +581,43 @@ function renderReport(summary){
     </table>
   `;
 
-  body.innerHTML = kpiHtml + tableHtml;
+  const people = summary.people || [];
+  let detailHtml = `
+    <h3 style="font-family:Georgia,serif; font-size:16px; margin:26px 0 10px;">Хvн бvрийн дэлгэрэнгvй (алба удирдлагад илгээхэд)</h3>
+    <input type="text" id="peopleFilter" placeholder="Алба, тушаал эсвэл нэрээр хайх..." style="width:100%; max-width:360px; padding:9px 11px; border:1px solid var(--line); border-radius:5px; font-size:14px; font-family:inherit; margin-bottom:10px;">
+    <table id="peopleTable">
+      <thead>
+        <tr>
+          <th>Алба, нэгж</th>
+          <th>Албан тушаал</th>
+          <th>Нэр</th>
+          ${weekIds.map((id, i) => `<th title="${escapeAttr(weekTitles[i]||"")}">С${i+1}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${people.map(p => `
+          <tr data-filter="${escapeAttr((p.org + " " + p.position + " " + p.name).toLowerCase())}">
+            <td>${escapeHtml(p.org)}</td>
+            <td>${escapeHtml(p.position || "")}</td>
+            <td>${escapeHtml(p.name)}</td>
+            ${weekIds.map(id => `<td style="text-align:center;">${p.completed && p.completed[id] ? "✓" : "—"}</td>`).join("")}
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+
+  body.innerHTML = kpiHtml + tableHtml + detailHtml;
+
+  const filterInput = document.getElementById("peopleFilter");
+  if(filterInput){
+    filterInput.addEventListener("input", () => {
+      const q = filterInput.value.trim().toLowerCase();
+      document.querySelectorAll("#peopleTable tbody tr").forEach((tr) => {
+        tr.hidden = q && !tr.getAttribute("data-filter").includes(q);
+      });
+    });
+  }
 }
 
 /* ---------- Нууц vг солих ---------- */

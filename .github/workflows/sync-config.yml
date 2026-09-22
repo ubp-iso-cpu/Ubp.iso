@@ -1,0 +1,38 @@
+name: Sync config from Apps Script
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch latest config from Apps Script
+        run: |
+          curl -sL --max-time 25 --retry 2 \
+            "https://script.google.com/macros/s/AKfycbwq2Oeh5PEyqoT1SAD3HAahmSrOtAYL4n5lUCzGDIWZtI06es05-0v9yfGonSZKIXXv/exec" \
+            -o config.json.new
+
+      - name: Validate JSON before replacing
+        run: |
+          node -e "
+            const fs = require('fs');
+            const d = JSON.parse(fs.readFileSync('config.json.new', 'utf8'));
+            if (!Array.isArray(d.weeks)) throw new Error('config.json.new: weeks array missing');
+          "
+          mv config.json.new config.json
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add config.json
+          git diff --staged --quiet || git commit -m "Auto-sync config.json from Apps Script"
+          git push

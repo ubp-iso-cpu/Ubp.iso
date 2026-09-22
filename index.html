@@ -641,10 +641,26 @@ setInterval(() => {
   });
 }, 400);
 
-// Google Apps Script заримдаа удаан хариу өгдөг (ялангуяа олон хvн зэрэг орох vед)
-// тул дахин оролдох логик ашиглаж тогтвортой болгоно. Кэш ашигладаггvй —
-// админ өгөгдөл шинэчлэх бvрд бvх хэрэглэгч шууд шинэ мэдээлэл харна.
+// Олон хvн зэрэг орвол Apps Script-руу шууд бvгд хандах нь удаашрал vvсгэдэг
+// (шалгасан: 20 хvн зэрэг ороход 3 нь 20 секундээс удаан хvлээдэг байсан).
+// Тиймээс эхлээд GitHub Pages-ийн CDN дээр 5 минут тутам автоматаар
+// шинэчлэгддэг статик config.json-оос уншина — энэ нь хэдэн мянган хvн зэрэг
+// орсон ч огт удаашрахгvй. Амжилтгvй бол (файл олдохгvй, хуучирсан г.м.)
+// Apps Script-руу шууд дахин оролдох логиктойгоор ханддаг хуучин аргаар орлуулна.
+async function fetchStaticConfig(){
+  const res = await fetch("config.json", { cache: "no-store" });
+  if(!res.ok) throw new Error("HTTP " + res.status);
+  const data = await res.json();
+  if(!data || !Array.isArray(data.weeks)) throw new Error("invalid config.json");
+  return data;
+}
+
 async function fetchBundleWithRetry(maxAttempts){
+  try{
+    return await fetchStaticConfig();
+  }catch(e){
+    // fallback руу шилжинэ
+  }
   let lastErr;
   for(let attempt = 1; attempt <= maxAttempts; attempt++){
     try{

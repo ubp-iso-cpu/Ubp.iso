@@ -177,7 +177,13 @@ function readProgressSummary() {
   const weekIds = weeks.map((w) => w.id);
 
   // Хvн бvрийг (алба+тушаал+нэр) нэгтгэж, тэдний бvртгvvлсэн болон дуусгасан
-  // сургалтуудыг цуглуулна.
+  // сургалтуудыг цуглуулна. Нэрээ өөр өөр vед том/жижиг vсэг, зайгаар өөрөөр
+  // бичсэн ч (жишээ нь "С.Мэнхvvл" vs "с.мэнхvvл") ижил хvн гэж танихын тулд
+  // харьцуулах түлхvvрийг жигдэлж (normalize) vvсгэнэ — харин анх бvртгэгдсэн
+  // бичлэгийн жинхэнэ хэлбэрийг харуулахдаа хэвээр vлдээнэ.
+  function normalizeKey(s) {
+    return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+  }
   const people = {}; // key -> {org, position, name, completed:Set}
   rows.forEach((r) => {
     const org = String(r[1] || "(тодорхойгvй)");
@@ -185,7 +191,7 @@ function readProgressSummary() {
     const name = String(r[3] || "(тодорхойгvй)");
     const weekId = String(r[4] || "");
     const event = String(r[5] || "");
-    const key = org + "||" + position + "||" + name;
+    const key = normalizeKey(org) + "||" + normalizeKey(position) + "||" + normalizeKey(name);
     if (!people[key]) {
       people[key] = { org: org, position: position, name: name, completed: {} };
     }

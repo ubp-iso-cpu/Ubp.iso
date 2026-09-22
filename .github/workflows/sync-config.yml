@@ -14,20 +14,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch latest config from Apps Script
+      - name: Fetch and validate latest config from Apps Script (дотооддоо дахин оролдоно)
         run: |
-          curl -sL --max-time 25 --retry 2 \
-            "https://script.google.com/macros/s/AKfycbwq2Oeh5PEyqoT1SAD3HAahmSrOtAYL4n5lUCzGDIWZtI06es05-0v9yfGonSZKIXXv/exec" \
-            -o config.json.new
-
-      - name: Validate JSON before replacing
-        run: |
-          node -e "
-            const fs = require('fs');
-            const d = JSON.parse(fs.readFileSync('config.json.new', 'utf8'));
-            if (!Array.isArray(d.weeks)) throw new Error('config.json.new: weeks array missing');
-          "
-          mv config.json.new config.json
+          URL="https://script.google.com/macros/s/AKfycbwq2Oeh5PEyqoT1SAD3HAahmSrOtAYL4n5lUCzGDIWZtI06es05-0v9yfGonSZKIXXv/exec"
+          for attempt in 1 2 3 4 5; do
+            echo "Attempt $attempt..."
+            curl -sL --max-time 25 "$URL" -o config.json.new || true
+            if node -e "
+              const fs = require('fs');
+              try {
+                const d = JSON.parse(fs.readFileSync('config.json.new', 'utf8'));
+                process.exit(Array.isArray(d.weeks) ? 0 : 1);
+              } catch (e) { process.exit(1); }
+            "; then
+              echo "Valid JSON received."
+              mv config.json.new config.json
+              exit 0
+            fi
+            echo "Invalid/failed response, retrying after delay..."
+            sleep $((attempt * 5))
+          done
+          echo "All attempts failed — Apps Script may be having a transient issue. Leaving existing config.json unchanged."
+          exit 1
 
       - name: Commit and push if changed
         run: |

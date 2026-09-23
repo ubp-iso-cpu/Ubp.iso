@@ -580,7 +580,13 @@ function renderReport(summary){
     </div>
   `;
 
+  const presentOrgs = new Set((summary.byOrg || []).map(r => r.org));
+  const missingDepts = Array.from(new Set((orgRows || []).map(r => r.department)))
+    .filter(d => d && !presentOrgs.has(d))
+    .sort();
+
   let tableHtml = `
+    ${missingDepts.length ? `<p class="status err" style="margin:0 0 10px;">Огт бvртгvvлээгvй алба, нэгж (${missingDepts.length}): ${missingDepts.map(escapeHtml).join(", ")}</p>` : ""}
     <table>
       <thead>
         <tr>
@@ -595,6 +601,13 @@ function renderReport(summary){
             <td>${escapeHtml(row.org)}</td>
             <td>${row.participants}</td>
             ${weekIds.map(id => `<td>${row.perWeek[id] || 0}</td>`).join("")}
+          </tr>
+        `).join("")}
+        ${missingDepts.map(dept => `
+          <tr style="background:#fdf2f2; color:#b42318;">
+            <td>${escapeHtml(dept)} <span style="font-weight:600;">(оролцоогvй)</span></td>
+            <td>0</td>
+            ${weekIds.map(() => `<td>0</td>`).join("")}
           </tr>
         `).join("")}
       </tbody>

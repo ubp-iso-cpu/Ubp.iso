@@ -201,8 +201,10 @@
       <div class="week-card" style="margin-bottom:20px;">
         <div class="row-title" style="margin-bottom:10px;">Оноо оруулах (Microsoft Forms Quiz Excel)</div>
         <p class="hint" style="margin:0 0 12px;">
-          Тухайн сургалтын Quiz хариултыг Microsoft Forms-с "Open in Excel" хийж татаад, .xlsx файлыг
-          эндээс оруулна. Систем нэр, оноог автоматаар таамаглана — доор шалгаад буруу бол өөрөө сонгож болно.
+          Microsoft Forms дээрх тухайн Quiz-ийн <b>"Responses" (Хариултууд)</b> табаас <b>"Open in Excel"</b>
+          товчоор татсан .xlsx файлыг эндээс оруулна (энэ файлд хvн бvр мөр бvрд, асуулт бvр өөрийн
+          баганад орсон байдаг — Quiz-ийн агуулга/асуултын жагсаалт файл биш). Систем нэр, оноог
+          автоматаар таамаглана; доор бvх баганыг жишээ утгын хамт харуулна, буруу бол өөрөө сонгож болно.
         </p>
         <div class="field">
           <label>Аль сургалтын оноо вэ?</label>
@@ -213,6 +215,8 @@
           <input type="file" id="scoreFileInput" accept=".xlsx,.xls">
         </div>
         <div id="scoreMapping" hidden>
+          <p class="hint" style="margin:0 0 8px;">Файлд олдсон бvх багана (эхний мөрийн жишээ утгын хамт):</p>
+          <div id="scoreColumnList" style="overflow-x:auto;"></div>
           <div class="row" style="gap:12px;">
             <div class="field" style="flex:1;">
               <label>Нэрийн багана аль нь вэ?</label>
@@ -783,10 +787,32 @@ document.getElementById("scoreFileInput").addEventListener("change", async (e) =
       return;
     }
 
+    // Нэг файлд асуулт бvр өөрийн багана болдог тул толгойн нэр ижил/урт байх нь
+    // элбэг — иймд сонголт бvрийг дугаарлаж, бvх баганыг жишээ утгын хамт жагсаана
+    // (доор), ингэснээр админ өөрөө ч, шаардлагатай бол дэлгэцийн зурагаар vзvvлэхэд ч
+    // тодорхой байх болно.
+    const colList = document.getElementById("scoreColumnList");
+    if(colList){
+      colList.innerHTML = `
+        <table style="margin-bottom:14px;">
+          <thead><tr><th>#</th><th>Баганы толгой</th><th>Жишээ утга (1-р мөр)</th></tr></thead>
+          <tbody>
+            ${scoreHeaders.map((h, i) => `
+              <tr>
+                <td>${i+1}</td>
+                <td>${escapeHtml(h || "(нэргvй)")}</td>
+                <td>${escapeHtml(String(scoreWorkbookRows[0] ? scoreWorkbookRows[0][i] ?? "" : ""))}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
     const nameSel = document.getElementById("scoreNameCol");
     const scoreSel = document.getElementById("scoreScoreCol");
     const placeholder = `<option value="">-- сонгоно уу --</option>`;
-    const optionsHtml = placeholder + scoreHeaders.map((h, i) => `<option value="${i}">${escapeHtml(h || ("Багана " + (i+1)))}</option>`).join("");
+    const optionsHtml = placeholder + scoreHeaders.map((h, i) => `<option value="${i}">#${i+1}: ${escapeHtml(h || ("Багана " + (i+1)))}</option>`).join("");
     nameSel.innerHTML = optionsHtml;
     scoreSel.innerHTML = optionsHtml;
 

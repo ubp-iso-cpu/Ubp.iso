@@ -6,6 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ISO Аян — Админ</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
     --ink:#1c2b24; --paper:#f6f4ee; --line:#d9d3c3;
@@ -202,6 +203,38 @@
         дахин эхлvvлнэ. Тестийн явцад цугласан өгөгдлийг арилгаад, жинхэнэ аяныг цэвэр тоолуураар
         эхлvvлэхэд ашиглана. Буцаах боломжгvй.
       </p>
+
+      <div class="week-card" style="margin-bottom:20px;">
+        <div class="row-title" style="margin-bottom:10px;">Оноо оруулах (Microsoft Forms Quiz Excel)</div>
+        <p class="hint" style="margin:0 0 12px;">
+          Тухайн сургалтын Quiz хариултыг Microsoft Forms-с "Open in Excel" хийж татаад, .xlsx файлыг
+          эндээс оруулна. Систем нэр, оноог автоматаар таамаглана — доор шалгаад буруу бол өөрөө сонгож болно.
+        </p>
+        <div class="field">
+          <label>Аль сургалтын оноо вэ?</label>
+          <select id="scoreWeekSelect"></select>
+        </div>
+        <div class="field">
+          <label>Excel файл (.xlsx)</label>
+          <input type="file" id="scoreFileInput" accept=".xlsx,.xls">
+        </div>
+        <div id="scoreMapping" hidden>
+          <div class="row" style="gap:12px;">
+            <div class="field" style="flex:1;">
+              <label>Нэрийн багана аль нь вэ?</label>
+              <select id="scoreNameCol"></select>
+            </div>
+            <div class="field" style="flex:1;">
+              <label>Онооны багана аль нь вэ?</label>
+              <select id="scoreScoreCol"></select>
+            </div>
+          </div>
+          <div id="scorePreview" style="margin-bottom:12px;"></div>
+          <button class="btn" id="saveScoresBtn" type="button">Оноог хадгалах</button>
+          <span class="status" id="scoreUploadStatus"></span>
+        </div>
+      </div>
+
       <div id="reportBody"></div>
     </section>
 
@@ -345,6 +378,7 @@ function renderWeeks(){
     `;
     weekList.appendChild(card);
   });
+  populateScoreWeekSelect();
 }
 
 function escapeAttr(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
@@ -580,6 +614,29 @@ function renderReport(summary){
     </div>
   `;
 
+  const leaderboard = (summary.leaderboard || []).slice(0, 10);
+  let leaderboardHtml = "";
+  if(leaderboard.length){
+    leaderboardHtml = `
+      <h3 style="font-family:Georgia,serif; font-size:16px; margin:0 0 10px;">Онооны тэргvvлэгчид (эхний 10)</h3>
+      <table style="margin-bottom:20px;">
+        <thead>
+          <tr><th>Байр</th><th>Нэр</th><th>Алба, нэгж</th><th>Нийт оноо</th></tr>
+        </thead>
+        <tbody>
+          ${leaderboard.map((p, i) => `
+            <tr${p.matched ? "" : ` style="background:#fdf7ea;"`}>
+              <td>${i+1}</td>
+              <td>${escapeHtml(p.name)}</td>
+              <td>${p.matched ? escapeHtml(p.org) : "Тодорхойгvй (нэр тааруулагдаагvй)"}</td>
+              <td>${p.score}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
   const presentOrgs = new Set((summary.byOrg || []).map(r => r.org));
   const missingDepts = Array.from(new Set((orgRows || []).map(r => r.department)))
     .filter(d => d && !presentOrgs.has(d))
@@ -648,7 +705,7 @@ function renderReport(summary){
     </table>
   `;
 
-  body.innerHTML = kpiHtml + tableHtml + detailHtml;
+  body.innerHTML = kpiHtml + leaderboardHtml + tableHtml + detailHtml;
 
   const orgFilterSelect = document.getElementById("peopleOrgFilter");
   const filterInput = document.getElementById("peopleFilter");
@@ -676,6 +733,119 @@ function renderReport(summary){
   if(orgFilterSelect) orgFilterSelect.addEventListener("change", applyPeopleFilter);
   if(filterInput) filterInput.addEventListener("input", applyPeopleFilter);
 }
+
+/* ---------- Оноо оруулах (Microsoft Forms Quiz Excel) ---------- */
+let scoreWorkbookRows = []; // Excel-ийн мөрvvд (header орохгvй)
+let scoreHeaders = [];
+
+function populateScoreWeekSelect(){
+  const sel = document.getElementById("scoreWeekSelect");
+  if(!sel) return;
+  const prevValue = sel.value;
+  sel.innerHTML = weeks.map((w, i) => `<option value="${escapeAttr(w.id)}">${escapeHtml((i+1) + "-р сургалт: " + (w.title || ""))}</option>`).join("");
+  if(prevValue && weeks.some(w => w.id === prevValue)) sel.value = prevValue;
+}
+
+document.getElementById("scoreFileInput").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  const mappingBox = document.getElementById("scoreMapping");
+  const statusEl = document.getElementById("scoreUploadStatus");
+  statusEl.textContent = "";
+  statusEl.className = "status";
+  mappingBox.hidden = true;
+  if(!file) return;
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    if(!rows.length){
+      statusEl.textContent = "Файл хоосон байна.";
+      statusEl.className = "status err";
+      return;
+    }
+    scoreHeaders = rows[0].map(h => String(h));
+    scoreWorkbookRows = rows.slice(1).filter(r => r.some(c => String(c).trim() !== ""));
+    if(!scoreWorkbookRows.length){
+      statusEl.textContent = "Мөр олдсонгvй.";
+      statusEl.className = "status err";
+      return;
+    }
+
+    const nameSel = document.getElementById("scoreNameCol");
+    const scoreSel = document.getElementById("scoreScoreCol");
+    const optionsHtml = scoreHeaders.map((h, i) => `<option value="${i}">${escapeHtml(h || ("Багана " + (i+1)))}</option>`).join("");
+    nameSel.innerHTML = optionsHtml;
+    scoreSel.innerHTML = optionsHtml;
+
+    // "Name"/"Нэр" болон "Score"/"Оноо" гэсэн vгтэй баганыг автоматаар таамаглана
+    const guessIndex = (keywords) => scoreHeaders.findIndex(h => keywords.some(k => String(h).toLowerCase().includes(k)));
+    const nameGuess = guessIndex(["name", "нэр"]);
+    const scoreGuess = guessIndex(["score", "оноо", "points"]);
+    if(nameGuess !== -1) nameSel.value = String(nameGuess);
+    if(scoreGuess !== -1) scoreSel.value = String(scoreGuess);
+
+    renderScorePreview();
+    mappingBox.hidden = false;
+  }catch(err){
+    statusEl.textContent = "Файл уншихад алдаа гарлаа (.xlsx файл эсэхийг шалгана уу).";
+    statusEl.className = "status err";
+  }
+});
+
+function renderScorePreview(){
+  const nameIdx = Number(document.getElementById("scoreNameCol").value);
+  const scoreIdx = Number(document.getElementById("scoreScoreCol").value);
+  const box = document.getElementById("scorePreview");
+  const previewRows = scoreWorkbookRows.slice(0, 8);
+  box.innerHTML = `
+    <table>
+      <thead><tr><th>Нэр (Excel-с)</th><th>Оноо</th></tr></thead>
+      <tbody>
+        ${previewRows.map(r => `<tr><td>${escapeHtml(String(r[nameIdx] ?? ""))}</td><td>${escapeHtml(String(r[scoreIdx] ?? ""))}</td></tr>`).join("")}
+      </tbody>
+    </table>
+    <p class="hint" style="margin-top:6px;">Нийт ${scoreWorkbookRows.length} мөр олдлоо (эхний 8-г vзvvлж байна). Баганыг дээрээс өөрчилж болно.</p>
+  `;
+}
+
+document.getElementById("scoreNameCol").addEventListener("change", renderScorePreview);
+document.getElementById("scoreScoreCol").addEventListener("change", renderScorePreview);
+
+document.getElementById("saveScoresBtn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("scoreUploadStatus");
+  const weekId = document.getElementById("scoreWeekSelect").value;
+  const nameIdx = Number(document.getElementById("scoreNameCol").value);
+  const scoreIdx = Number(document.getElementById("scoreScoreCol").value);
+  if(!weekId){
+    statusEl.textContent = "Сургалт сонгоно уу.";
+    statusEl.className = "status err";
+    return;
+  }
+  const scores = scoreWorkbookRows
+    .map(r => ({ name: String(r[nameIdx] ?? "").trim(), score: Number(r[scoreIdx]) || 0 }))
+    .filter(r => r.name);
+  if(!scores.length){
+    statusEl.textContent = "Оруулах мөр олдсонгvй.";
+    statusEl.className = "status err";
+    return;
+  }
+  statusEl.textContent = "Хадгалж байна...";
+  statusEl.className = "status";
+  try{
+    const data = await callAppsScript({ action: "saveScores", password: ADMIN_PASSWORD, weekId, scores });
+    if(!data.ok){
+      statusEl.textContent = data.error === "unauthorized" ? "Нууц vг буруу." : "Алдаа гарлаа.";
+      statusEl.className = "status err";
+      return;
+    }
+    statusEl.textContent = `${scores.length} хvний оноо хадгалагдлаа. Доорх "Тайлан татах" товчийг дарж тэргvvлэгчдийг харна уу.`;
+    statusEl.className = "status ok";
+  }catch(e){
+    statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";
+    statusEl.className = "status err";
+  }
+});
 
 /* ---------- Нууц vг солих ---------- */
 function validatePasswordStrength(pw){

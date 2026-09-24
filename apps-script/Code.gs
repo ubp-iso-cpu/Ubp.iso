@@ -10,6 +10,7 @@ const SHEET_WEEKS = "Weeks";
 const SHEET_CONFIG = "Config";
 const SHEET_ORG = "OrgStructure";
 const SHEET_PROGRESS = "Progress";
+const SHEET_SCORES = "Scores";
 
 const WEEK_COLUMNS = ["id", "title", "desc", "youtubeId", "formUrl", "opensAt", "closesAt"];
 
@@ -147,6 +148,12 @@ function writeOrg(rows) {
   });
 }
 
+// Нэрийг том/жижиг vсэг, зайн ялгаа vл хамааран харьцуулах түлхvvр болгож жигдэлнэ
+// (жишээ нь "С.Мэнхvvл" vs "с.мэнхvvл" ижил хvн гэж танигдана).
+function normalizeKey(s) {
+  return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 /* ---------- Progress (event log) ---------- */
 const PROGRESS_COLUMNS = ["timestamp", "org", "position", "name", "weekId", "event"];
 
@@ -168,6 +175,34 @@ function logProgress(entry) {
   ]);
 }
 
+/* ---------- Scores (Microsoft Forms Quiz-с Excel-ээр оруулсан оноо) ---------- */
+const SCORE_COLUMNS = ["weekId", "name", "score"];
+
+function readScores() {
+  const sheet = getOrCreateSheet(SHEET_SCORES, SCORE_COLUMNS);
+  const values = sheet.getDataRange().getValues();
+  return values
+    .slice(1)
+    .filter((r) => r[1])
+    .map((r) => ({ weekId: String(r[0] || ""), name: String(r[1] || ""), score: Number(r[2]) || 0 }));
+}
+
+// Тухайн сургалтын өмнөх онооны мөрvvдийг арилгаад, шинээр оруулсан Excel-ийн
+// өгөгдлөөр сольж бичнэ (давхар оруулбал давхардахгvй байхын тулд).
+function writeScoresForWeek(weekId, rows) {
+  const sheet = getOrCreateSheet(SHEET_SCORES, SCORE_COLUMNS);
+  const values = sheet.getDataRange().getValues();
+  const keep = values.slice(1).filter((r) => String(r[0] || "") !== String(weekId) && r[1]);
+  sheet.clearContents();
+  sheet.appendRow(SCORE_COLUMNS);
+  keep.forEach((r) => sheet.appendRow(r));
+  rows.forEach((r) => {
+    const name = String(r.name || "").trim();
+    if (!name) return;
+    sheet.appendRow([String(weekId), name, Number(r.score) || 0]);
+  });
+}
+
 function readProgressSummary() {
   const sheet = getOrCreateSheet(SHEET_PROGRESS, PROGRESS_COLUMNS);
   const values = sheet.getDataRange().getValues();
@@ -181,9 +216,6 @@ function readProgressSummary() {
   // бичсэн ч (жишээ нь "С.Мэнхvvл" vs "с.мэнхvvл") ижил хvн гэж танихын тулд
   // харьцуулах түлхvvрийг жигдэлж (normalize) vvсгэнэ — харин анх бvртгэгдсэн
   // бичлэгийн жинхэнэ хэлбэрийг харуулахдаа хэвээр vлдээнэ.
-  function normalizeKey(s) {
-    return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
-  }
   const people = {}; // key -> {org, position, name, completed:Set}
   rows.forEach((r) => {
     const org = String(r[1] || "(тодорхойгvй)");
@@ -229,6 +261,33 @@ function readProgressSummary() {
     return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
   });
 
+  // Онооны тэргvvлэгчид: Excel-ээр оруулсан оноог (Scores) нэр тус бvрээр нэгтгэж,
+  // боломжтой бол бvртгэлтэй хvний алба/тушаалтай тааруулна (нэрээр normalize хийж).
+  const peopleByName = {};
+  peopleList.forEach((p) => {
+    const k = normalizeKey(p.name);
+    if (k && !peopleByName[k]) peopleByName[k] = p;
+  });
+  const scoreTotals = {}; // normalizedName -> {name, total}
+  readScores().forEach((r) => {
+    const key = normalizeKey(r.name);
+    if (!key) return;
+    if (!scoreTotals[key]) scoreTotals[key] = { name: r.name, total: 0 };
+    scoreTotals[key].total += r.score;
+  });
+  const leaderboard = Object.keys(scoreTotals)
+    .map((key) => {
+      const matched = peopleByName[key];
+      return {
+        name: matched ? matched.name : scoreTotals[key].name,
+        org: matched ? matched.org : "",
+        position: matched ? matched.position : "",
+        score: scoreTotals[key].total,
+        matched: !!matched,
+      };
+    })
+    .sort((a, b) => b.score - a.score);
+
   return {
     weekIds: weekIds,
     weekTitles: weeks.map((w) => w.title),
@@ -241,6 +300,7 @@ function readProgressSummary() {
       name: p.name,
       completed: p.completed,
     })),
+    leaderboard: leaderboard,
   };
 }
 
@@ -319,6 +379,12 @@ function doPost(e) {
   if (action === "saveOrg") {
     if (!Array.isArray(body.org)) return jsonResponse({ ok: false, error: "expected_org_array" });
     writeOrg(body.org);
+    return jsonResponse({ ok: true });
+  }
+
+  if (action === "saveScores") {
+    if (!body.weekId || !Array.isArray(body.scores)) return jsonResponse({ ok: false, error: "expected_weekid_and_scores" });
+    writeScoresForWeek(body.weekId, body.scores);
     return jsonResponse({ ok: true });
   }
 

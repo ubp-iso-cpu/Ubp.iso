@@ -195,14 +195,8 @@
     <section class="tabpanel" id="tab-report">
       <div class="toolbar">
         <button class="btn secondary" id="loadReportBtn" type="button">Тайлан татах</button>
-        <button class="btn danger" id="resetReportBtn" type="button">Тайлан цэвэрлэх (дахин эхлэх)</button>
         <span class="status" id="reportStatus"></span>
       </div>
-      <p style="font-size:12.5px;color:#8a8272;margin:-6px 0 14px;">
-        "Тайлан цэвэрлэх" товч нь бvх бvртгvvлсэн/vзсэн мэдээллийг бvрмөсөн устгаж, тоолуурыг 0-ээс
-        дахин эхлvvлнэ. Тестийн явцад цугласан өгөгдлийг арилгаад, жинхэнэ аяныг цэвэр тоолуураар
-        эхлvvлэхэд ашиглана. Буцаах боломжгvй.
-      </p>
 
       <div class="week-card" style="margin-bottom:20px;">
         <div class="row-title" style="margin-bottom:10px;">Оноо оруулах (Microsoft Forms Quiz Excel)</div>
@@ -230,12 +224,23 @@
             </div>
           </div>
           <div id="scorePreview" style="margin-bottom:12px;"></div>
-          <button class="btn" id="saveScoresBtn" type="button">Оноог хадгалах</button>
+          <button class="btn" id="saveScoresBtn" type="button" disabled>Оноог хадгалах</button>
           <span class="status" id="scoreUploadStatus"></span>
         </div>
       </div>
 
       <div id="reportBody"></div>
+
+      <div class="week-card" style="margin-top:30px; border-color:#e5c9c0; background:#fdf5f3;">
+        <div class="row-title" style="color:var(--err); margin-bottom:8px;">⚠ Аюултай бvс</div>
+        <p class="hint" style="margin:0 0 14px;">
+          Доорх товч бvх бvртгvvлсэн/vзсэн мэдээллийг (хvмvvсийн явц, оноо) бvрмөсөн устгаж, тоолуурыг
+          0-ээс дахин эхлvvлнэ. Тестийн явцад цугласан өгөгдлийг арилгаад, жинхэнэ аяныг цэвэр тоолуураар
+          эхлvvлэхэд л ашиглана. Буцаах боломжгvй.
+        </p>
+        <button class="btn danger" id="resetReportBtn" type="button">Тайлан цэвэрлэх (дахин эхлэх)</button>
+        <span class="status" id="resetStatus"></span>
+      </div>
     </section>
 
     <!-- Нууц vг -->
@@ -581,9 +586,15 @@ document.getElementById("loadReportBtn").addEventListener("click", async () => {
 });
 
 document.getElementById("resetReportBtn").addEventListener("click", async () => {
-  const statusEl = document.getElementById("reportStatus");
-  const confirmed = confirm("Бvх бvртгvvлсэн/vзсэн мэдээллийг бvрмөсөн устгаж, тайланг 0-ээс дахин эхлvvлэх vv? Энэ vйлдлийг буцаах боломжгvй.");
-  if(!confirmed) return;
+  const statusEl = document.getElementById("resetStatus");
+  // Санамсаргvй дарахаас сэргийлж энгийн OK/Cancel биш, тодорхой vг бичиж
+  // баталгаажуулна — эргэн сэргээх боломжгvй устгалт учир.
+  const typed = prompt('Бvх бvртгvvлсэн/vзсэн мэдээллийг (явц, оноо) бvрмөсөн устгаж, 0-ээс дахин эхлvvлэхийг баталгаажуулахын тулд доор яг "УСТГА" гэж бичнэ vv:');
+  if(typed !== "УСТГА"){
+    statusEl.textContent = typed === null ? "" : 'Цуцлагдлаа ("УСТГА" гэж яг таарч бичээгvй).';
+    statusEl.className = "status";
+    return;
+  }
   statusEl.textContent = "Цэвэрлэж байна...";
   statusEl.className = "status";
   try{
@@ -774,14 +785,29 @@ document.getElementById("scoreFileInput").addEventListener("change", async (e) =
 
     const nameSel = document.getElementById("scoreNameCol");
     const scoreSel = document.getElementById("scoreScoreCol");
-    const optionsHtml = scoreHeaders.map((h, i) => `<option value="${i}">${escapeHtml(h || ("Багана " + (i+1)))}</option>`).join("");
+    const placeholder = `<option value="">-- сонгоно уу --</option>`;
+    const optionsHtml = placeholder + scoreHeaders.map((h, i) => `<option value="${i}">${escapeHtml(h || ("Багана " + (i+1)))}</option>`).join("");
     nameSel.innerHTML = optionsHtml;
     scoreSel.innerHTML = optionsHtml;
 
-    // "Name"/"Нэр" болон "Score"/"Оноо" гэсэн vгтэй баганыг автоматаар таамаглана
-    const guessIndex = (keywords) => scoreHeaders.findIndex(h => keywords.some(k => String(h).toLowerCase().includes(k)));
-    const nameGuess = guessIndex(["name", "нэр"]);
-    const scoreGuess = guessIndex(["score", "оноо", "points"]);
+    // Нэрийн багана: "Name"/"Нэр" гэсэн vгтэй толгойгоор таамаглана.
+    const nameGuess = scoreHeaders.findIndex(h => ["name", "нэр"].some(k => String(h).toLowerCase().includes(k)));
+
+    // Онооны багана: эхлээд толгой яг "score" гэдэгтэй таарсан баганыг хайна.
+    // Quiz-ийн асуултын толгойд "(N оноо)" гэх мэт орж болдог тул зөвхөн "оноо" гэдэг
+    // vгээр хайвал алдаатай (текст) баганыг сонгож болзошгvй — иймд олдохгvй бол
+    // баганын утгууд хэдий хэмжээгээр тоон эсэхийг шалгаж, хамгийн өндөр харьцаатайг
+    // сонгоно (60%-иас доош бол автоматаар сонгохгvй, админ өөрөө сонгоно).
+    let scoreGuess = scoreHeaders.findIndex(h => String(h).trim().toLowerCase() === "score");
+    if(scoreGuess === -1){
+      let bestRatio = 0;
+      scoreHeaders.forEach((h, i) => {
+        if(i === nameGuess) return;
+        const ratio = numericRatio(i, scoreWorkbookRows);
+        if(ratio > bestRatio){ bestRatio = ratio; scoreGuess = i; }
+      });
+      if(bestRatio < 0.6) scoreGuess = -1;
+    }
     if(nameGuess !== -1) nameSel.value = String(nameGuess);
     if(scoreGuess !== -1) scoreSel.value = String(scoreGuess);
 
@@ -793,12 +819,39 @@ document.getElementById("scoreFileInput").addEventListener("change", async (e) =
   }
 });
 
+// Баганын утгуудын хэдий хэсэг нь тоон утга болохыг (0-1) буцаана.
+function numericRatio(colIdx, rows){
+  if(!rows.length) return 0;
+  let numeric = 0;
+  rows.forEach(r => {
+    const v = String(r[colIdx] ?? "").trim();
+    if(v !== "" && !isNaN(Number(v))) numeric++;
+  });
+  return numeric / rows.length;
+}
+
 function renderScorePreview(){
-  const nameIdx = Number(document.getElementById("scoreNameCol").value);
-  const scoreIdx = Number(document.getElementById("scoreScoreCol").value);
+  const nameVal = document.getElementById("scoreNameCol").value;
+  const scoreVal = document.getElementById("scoreScoreCol").value;
+  const saveBtn = document.getElementById("saveScoresBtn");
   const box = document.getElementById("scorePreview");
+
+  if(nameVal === "" || scoreVal === ""){
+    box.innerHTML = `<p class="status err">Нэр болон оноо баганыг сонгоно уу.</p>`;
+    saveBtn.disabled = true;
+    return;
+  }
+
+  const nameIdx = Number(nameVal);
+  const scoreIdx = Number(scoreVal);
+  const ratio = numericRatio(scoreIdx, scoreWorkbookRows);
+  const lowRatioWarning = ratio < 0.6
+    ? `<p class="status err">⚠ Сонгосон "${escapeHtml(scoreHeaders[scoreIdx] || "")}" багана ихэнхдээ тоон утга биш байна (${Math.round(ratio*100)}% нь тоо). Энэ нь "Оноо" багана мөн эсэхээ шалгана уу.</p>`
+    : "";
+  saveBtn.disabled = ratio < 0.6;
+
   const previewRows = scoreWorkbookRows.slice(0, 8);
-  box.innerHTML = `
+  box.innerHTML = lowRatioWarning + `
     <table>
       <thead><tr><th>Нэр (Excel-с)</th><th>Оноо</th></tr></thead>
       <tbody>
@@ -815,10 +868,24 @@ document.getElementById("scoreScoreCol").addEventListener("change", renderScoreP
 document.getElementById("saveScoresBtn").addEventListener("click", async () => {
   const statusEl = document.getElementById("scoreUploadStatus");
   const weekId = document.getElementById("scoreWeekSelect").value;
-  const nameIdx = Number(document.getElementById("scoreNameCol").value);
-  const scoreIdx = Number(document.getElementById("scoreScoreCol").value);
+  const nameVal = document.getElementById("scoreNameCol").value;
+  const scoreVal = document.getElementById("scoreScoreCol").value;
   if(!weekId){
     statusEl.textContent = "Сургалт сонгоно уу.";
+    statusEl.className = "status err";
+    return;
+  }
+  if(nameVal === "" || scoreVal === ""){
+    statusEl.textContent = "Нэр болон оноо баганыг сонгоно уу.";
+    statusEl.className = "status err";
+    return;
+  }
+  const nameIdx = Number(nameVal);
+  const scoreIdx = Number(scoreVal);
+  // Дахин баталгаажуулна — UI төлөв ямар нэг байдлаар алдагдсан ч буруу баганаар
+  // хадгалахаас сэргийлнэ (жишээ нь текст асуултыг оноо гэж хадгалахгvй).
+  if(numericRatio(scoreIdx, scoreWorkbookRows) < 0.6){
+    statusEl.textContent = "Сонгосон оноогийн багана ихэнхдээ тоон утга биш байна. Өөр багана сонгоно уу.";
     statusEl.className = "status err";
     return;
   }

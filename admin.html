@@ -228,6 +228,38 @@
             </div>
           </div>
           <div id="scorePreview" style="margin-bottom:12px;"></div>
+
+          <div style="border-top:1px solid var(--line); margin:18px 0 16px; padding-top:16px;">
+            <div class="row-title" style="margin-bottom:8px; font-size:13.5px;">Чөлөөт бичвэрийн асуулт AI-гаар vнэлэх (нэмэлт, заавал биш)</div>
+            <p class="hint" style="margin:0 0 12px;">
+              Хэрэв Quiz-т чөлөөт бичвэрээр хариулдаг, Forms автоматаар vнэлдэггvй асуулт байвал, тэр
+              баганыг сонгоод AI-аар vнэлvvлж болно. Санал болгосон оноог доор шалгаад засварлах боломжтой.
+              <b>Анхаар:</b> Хэрэв та Forms дотор зарим хvний энэ хариултыг аль хэдийн гараар vнэлсэн бол,
+              давхардал vvсэхээс сэргийлж зөвхөн бvгд vнэлээгvй (0 vнэлгээтэй) vед ашиглана уу.
+            </p>
+            <div class="row" style="gap:12px;">
+              <div class="field" style="flex:1;">
+                <label>Чөлөөт бичвэрийн багана аль нь вэ?</label>
+                <select id="aiTextCol"><option value="">-- сонгоно уу --</option></select>
+              </div>
+              <div class="field" style="width:120px;">
+                <label>Дээд оноо</label>
+                <input type="number" id="aiMaxPoints" value="1" min="1" step="1">
+              </div>
+            </div>
+            <div class="field">
+              <label>Асуултын текст (AI-д өгөх, засаж болно)</label>
+              <input type="text" id="aiQuestionText">
+            </div>
+            <div class="field">
+              <label>Оноо өгөх шалгуур (заавал биш)</label>
+              <textarea id="aiRubric" placeholder="жишээ нь: 2 оноо — 2 арга хэмжээг зөв тайлбарласан бол, 1 оноо — 1-ийг л дурьдсан бол, 0 оноо — хамааралгvй/алдаатай бол"></textarea>
+            </div>
+            <button class="btn secondary" id="aiGradeBtn" type="button">AI-гаар vнэлэх</button>
+            <span class="status" id="aiGradeStatus"></span>
+            <div id="aiGradeResults" style="margin-top:12px; overflow-x:auto;"></div>
+          </div>
+
           <button class="btn" id="saveScoresBtn" type="button" disabled>Оноог хадгалах</button>
           <span class="status" id="scoreUploadStatus"></span>
         </div>
@@ -837,12 +869,26 @@ document.getElementById("scoreFileInput").addEventListener("change", async (e) =
     if(nameGuess !== -1) nameSel.value = String(nameGuess);
     if(scoreGuess !== -1) scoreSel.value = String(scoreGuess);
 
+    // Чөлөөт бичвэрийн AI vнэлгээний баганы сонголтыг мөн шинэчилж, өмнөх файлын
+    // vр дvнг цэвэрлэнэ (шинэ файл бvрт дахин эхлэх ёстой).
+    const aiTextSel = document.getElementById("aiTextCol");
+    if(aiTextSel) aiTextSel.innerHTML = optionsHtml;
+    document.getElementById("aiQuestionText").value = "";
+    document.getElementById("aiRubric").value = "";
+    document.getElementById("aiGradeResults").innerHTML = "";
+    document.getElementById("aiGradeStatus").textContent = "";
+
     renderScorePreview();
     mappingBox.hidden = false;
   }catch(err){
     statusEl.textContent = "Файл уншихад алдаа гарлаа (.xlsx файл эсэхийг шалгана уу).";
     statusEl.className = "status err";
   }
+});
+
+document.getElementById("aiTextCol").addEventListener("change", () => {
+  const idx = document.getElementById("aiTextCol").value;
+  document.getElementById("aiQuestionText").value = idx !== "" ? (scoreHeaders[Number(idx)] || "") : "";
 });
 
 // Баганын утгуудын хэдий хэсэг нь тоон утга болохыг (0-1) буцаана.
@@ -891,6 +937,106 @@ function renderScorePreview(){
 document.getElementById("scoreNameCol").addEventListener("change", renderScorePreview);
 document.getElementById("scoreScoreCol").addEventListener("change", renderScorePreview);
 
+// Сервер талын normalizeKey-тэй адил — том/жижиг vсэг, зайн ялгаа vл хамааран
+// AI-гийн vнэлсэн нэрийг оноо баганын нэртэй тааруулахад ашиглана.
+function normalizeKeyClient(s){
+  return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function renderAiResults(results, maxPoints){
+  const box = document.getElementById("aiGradeResults");
+  box.innerHTML = `
+    <table>
+      <thead><tr><th>Нэр</th><th>Хариулт</th><th>AI санал (0–${maxPoints})</th><th>Шалтгаан</th></tr></thead>
+      <tbody>
+        ${results.map(r => `
+          <tr data-ai-name="${escapeAttr(r.name)}">
+            <td>${escapeHtml(r.name)}</td>
+            <td style="max-width:280px; white-space:pre-wrap;">${escapeHtml(r.answerText || "")}</td>
+            <td><input type="number" class="ai-score-input" min="0" max="${maxPoints}" step="1" value="${r.score}" style="width:64px; padding:6px 8px; border:1px solid var(--line); border-radius:5px;"></td>
+            <td style="font-size:12px; color:#7c7462;">${escapeHtml(r.reason || "")}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+    <p class="hint" style="margin-top:6px;">Шаардлагатай бол оноог дээрээс шууд засаж болно. "Оноог хадгалах" дарахад энэ AI оноог онооны баганатай автоматаар нэгтгэнэ.</p>
+  `;
+}
+
+document.getElementById("aiGradeBtn").addEventListener("click", async () => {
+  const statusEl = document.getElementById("aiGradeStatus");
+  const nameVal = document.getElementById("scoreNameCol").value;
+  const textVal = document.getElementById("aiTextCol").value;
+  const maxPoints = Number(document.getElementById("aiMaxPoints").value) || 1;
+  const rubric = document.getElementById("aiRubric").value.trim();
+  const question = document.getElementById("aiQuestionText").value.trim();
+  if(nameVal === ""){
+    statusEl.textContent = "Эхлээд дээрх 'Нэрийн багана'-г сонгоно уу.";
+    statusEl.className = "status err";
+    return;
+  }
+  if(textVal === ""){
+    statusEl.textContent = "Чөлөөт бичвэрийн багана сонгоно уу.";
+    statusEl.className = "status err";
+    return;
+  }
+  if(!question){
+    statusEl.textContent = "Асуултын текстийг оруулна уу.";
+    statusEl.className = "status err";
+    return;
+  }
+  const nameIdx = Number(nameVal);
+  const textIdx = Number(textVal);
+  const answers = scoreWorkbookRows
+    .map(r => ({ name: String(r[nameIdx] ?? "").trim(), text: String(r[textIdx] ?? "").trim() }))
+    .filter(a => a.name);
+  if(!answers.length){
+    statusEl.textContent = "Хариулт олдсонгvй.";
+    statusEl.className = "status err";
+    return;
+  }
+  statusEl.textContent = `AI-аар vнэлж байна... (${answers.length} хvн, хэдэн арван секунд vргэлжилж болно)`;
+  statusEl.className = "status";
+  const btn = document.getElementById("aiGradeBtn");
+  btn.disabled = true;
+  try{
+    const data = await callAppsScript({
+      action: "gradeTextAnswers", password: ADMIN_PASSWORD,
+      question, maxPoints, rubric, answers,
+    });
+    if(!data.ok){
+      statusEl.textContent = data.error === "unauthorized" ? "Нууц vг буруу."
+        : data.error === "missing_gemini_key" ? 'Gemini API key тохируулаагvй байна (Apps Script → Project Settings → Script Properties → "GEMINI_API_KEY" нэмнэ vv).'
+        : "Алдаа гарлаа: " + (data.message || data.error || "тодорхойгvй алдаа");
+      statusEl.className = "status err";
+      return;
+    }
+    const textByName = {};
+    answers.forEach(a => { textByName[normalizeKeyClient(a.name)] = a.text; });
+    const merged = (data.results || []).map(r => ({ ...r, answerText: textByName[normalizeKeyClient(r.name)] || "" }));
+    renderAiResults(merged, maxPoints);
+    statusEl.textContent = `${merged.length} хvний хариултыг vнэллээ. Доор шалгаарай.`;
+    statusEl.className = "status ok";
+  }catch(e){
+    statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";
+    statusEl.className = "status err";
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+function collectAiScoreMap(){
+  const rows = document.querySelectorAll("#aiGradeResults tbody tr");
+  if(!rows.length) return null;
+  const map = {};
+  rows.forEach((tr) => {
+    const name = tr.getAttribute("data-ai-name");
+    const input = tr.querySelector(".ai-score-input");
+    map[normalizeKeyClient(name)] = Number(input.value) || 0;
+  });
+  return map;
+}
+
 document.getElementById("saveScoresBtn").addEventListener("click", async () => {
   const statusEl = document.getElementById("scoreUploadStatus");
   const weekId = document.getElementById("scoreWeekSelect").value;
@@ -915,8 +1061,17 @@ document.getElementById("saveScoresBtn").addEventListener("click", async () => {
     statusEl.className = "status err";
     return;
   }
+  const aiScoreMap = collectAiScoreMap(); // AI-аар vнэлсэн бол баганад нэмнэ, vгvй бол null
   const scores = scoreWorkbookRows
-    .map(r => ({ name: String(r[nameIdx] ?? "").trim(), score: Number(r[scoreIdx]) || 0 }))
+    .map(r => {
+      const name = String(r[nameIdx] ?? "").trim();
+      let score = Number(r[scoreIdx]) || 0;
+      if(aiScoreMap){
+        const extra = aiScoreMap[normalizeKeyClient(name)];
+        if(extra !== undefined) score += extra;
+      }
+      return { name, score };
+    })
     .filter(r => r.name);
   if(!scores.length){
     statusEl.textContent = "Оруулах мөр олдсонгvй.";
@@ -932,7 +1087,7 @@ document.getElementById("saveScoresBtn").addEventListener("click", async () => {
       statusEl.className = "status err";
       return;
     }
-    statusEl.textContent = `${scores.length} хvний оноо хадгалагдлаа. Доорх "Тайлан татах" товчийг дарж тэргvvлэгчдийг харна уу.`;
+    statusEl.textContent = `${scores.length} хvний оноо хадгалагдлаа${aiScoreMap ? " (AI-гийн онооны хамт)" : ""}. Доорх "Тайлан татах" товчийг дарж тэргvvлэгчдийг харна уу.`;
     statusEl.className = "status ok";
   }catch(e){
     statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";

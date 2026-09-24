@@ -203,6 +203,74 @@ function writeScoresForWeek(weekId, rows) {
   });
 }
 
+/* ---------- Gemini AI (чөлөөт бичвэрийн хариулт vнэлэх) ---------- */
+// Google AI Studio-с (aistudio.google.com) vнэгvй авсан API key-г
+// Project Settings → Script Properties → GEMINI_API_KEY нэрээр хадгална.
+const GEMINI_MODEL = "gemini-2.0-flash";
+
+function callGemini(prompt) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
+  if (!apiKey) throw new Error("missing_gemini_key");
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + apiKey;
+  const payload = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: "application/json" },
+  };
+  const res = UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  });
+  const code = res.getResponseCode();
+  if (code !== 200) throw new Error("gemini_http_" + code + ": " + res.getContentText().slice(0, 300));
+  const data = JSON.parse(res.getContentText());
+  const text = data.candidates &&
+    data.candidates[0] &&
+    data.candidates[0].content &&
+    data.candidates[0].content.parts &&
+    data.candidates[0].content.parts[0] &&
+    data.candidates[0].content.parts[0].text;
+  if (!text) throw new Error("gemini_empty_response");
+  return text;
+}
+
+// answers: [{name, text}] — нэг Gemini дуудлагад хэт олон хvнийг оруулбал
+// хариу урт болж алдаа гарах эрсдэлтэй тул дуудагч тал BATCH_SIZE-аар хуваана.
+function gradeTextAnswersBatch(question, maxPoints, rubric, answers) {
+  const prompt =
+    "Чи Монгол хэл дээрх ажилтны сургалтын шалгалтын чөлөөт бичвэрийн хариултуудыг vнэлж буй туслах.\n" +
+    'Асуулт: "' + question + '"\n' +
+    "Дээд оноо (асуулт тус бvрд): " + maxPoints + "\n" +
+    (rubric ? "Оноо өгөх шалгуур: " + rubric + "\n" : "") +
+    "Доорх хvн бvрийн хариултыг уншиж, 0-ээс " + maxPoints + " хvртэлх бvхэл тоон оноо өг. " +
+    "Хариулаагvй эсвэл огт хамааралгvй бол 0 өг. " +
+    "Зөвхөн доорх форматтай JSON массив буцаа, өөр vг нэмэхгvй:\n" +
+    '[{"name": "...", "score": 0, "reason": "богино (10-15 vгтэй) тайлбар"}, ...]\n\n' +
+    "Хариултууд:\n" +
+    answers.map((a, i) => (i + 1) + ". Нэр: " + a.name + " | Хариулт: " + (a.text || "(хариулаагvй)")).join("\n");
+
+  const raw = callGemini(prompt);
+  let cleaned = raw.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "");
+  const parsed = JSON.parse(cleaned);
+  if (!Array.isArray(parsed)) throw new Error("gemini_bad_format");
+  return parsed.map((r) => ({
+    name: String(r.name || ""),
+    score: Math.max(0, Math.min(maxPoints, Math.round(Number(r.score) || 0))),
+    reason: String(r.reason || ""),
+  }));
+}
+
+function gradeTextAnswers(question, maxPoints, rubric, answers) {
+  const BATCH_SIZE = 25;
+  let results = [];
+  for (let i = 0; i < answers.length; i += BATCH_SIZE) {
+    const chunk = answers.slice(i, i + BATCH_SIZE);
+    results = results.concat(gradeTextAnswersBatch(question, maxPoints, rubric, chunk));
+  }
+  return results;
+}
+
 function readProgressSummary() {
   const sheet = getOrCreateSheet(SHEET_PROGRESS, PROGRESS_COLUMNS);
   const values = sheet.getDataRange().getValues();
@@ -386,6 +454,20 @@ function doPost(e) {
     if (!body.weekId || !Array.isArray(body.scores)) return jsonResponse({ ok: false, error: "expected_weekid_and_scores" });
     writeScoresForWeek(body.weekId, body.scores);
     return jsonResponse({ ok: true });
+  }
+
+  if (action === "gradeTextAnswers") {
+    if (!body.question || !Array.isArray(body.answers)) return jsonResponse({ ok: false, error: "expected_question_and_answers" });
+    try {
+      const maxPoints = Number(body.maxPoints) || 1;
+      const rubric = String(body.rubric || "");
+      const results = gradeTextAnswers(String(body.question), maxPoints, rubric, body.answers);
+      return jsonResponse({ ok: true, results: results });
+    } catch (err) {
+      const msg = String(err);
+      if (msg.indexOf("missing_gemini_key") !== -1) return jsonResponse({ ok: false, error: "missing_gemini_key" });
+      return jsonResponse({ ok: false, error: "gemini_failed", message: msg });
+    }
   }
 
   if (action === "getSummary") {

@@ -1087,7 +1087,10 @@ document.getElementById("saveScoresBtn").addEventListener("click", async () => {
       statusEl.className = "status err";
       return;
     }
-    statusEl.textContent = `${scores.length} хvний оноо хадгалагдлаа${aiScoreMap ? " (AI-гийн онооны хамт)" : ""}. Доорх "Тайлан татах" товчийг дарж тэргvvлэгчдийг харна уу.`;
+    const dupNote = data.duplicatesRemoved > 0
+      ? ` (${data.duplicatesRemoved} хvн Quiz-ээ хэд хэдэн удаа бөглөсөн тул хамгийн өндөр оноог нь авлаа.)`
+      : "";
+    statusEl.textContent = `${data.savedCount != null ? data.savedCount : scores.length} хvний оноо хадгалагдлаа${aiScoreMap ? " (AI-гийн онооны хамт)" : ""}.${dupNote} Доорх "Тайлан татах" товчийг дарж тэргvvлэгчдийг харна уу.`;
     statusEl.className = "status ok";
   }catch(e){
     statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";

@@ -193,14 +193,30 @@ function writeScoresForWeek(weekId, rows) {
   const sheet = getOrCreateSheet(SHEET_SCORES, SCORE_COLUMNS);
   const values = sheet.getDataRange().getValues();
   const keep = values.slice(1).filter((r) => String(r[0] || "") !== String(weekId) && r[1]);
-  sheet.clearContents();
-  sheet.appendRow(SCORE_COLUMNS);
-  keep.forEach((r) => sheet.appendRow(r));
+
+  // Нэг хvн Quiz-ийг хэд хэдэн удаа бөглөсөн тохиолдолд (Microsoft Forms дахин
+  // бөглөхийг хориглодоггvй тул Excel-д нэг хvн хэд хэдэн мөрөнд орж болно) —
+  // онооныг нэмэлгvй, зөвхөн хамгийн өндөр оноог нь тооцно. Ингэхгvй бол
+  // тухайн хvний нийт оноо мөр давхарласан тоогоор хэд дахин нэмэгдэж гарна.
+  const dedup = {}; // normalizedName -> {name, score}
   rows.forEach((r) => {
     const name = String(r.name || "").trim();
     if (!name) return;
-    sheet.appendRow([String(weekId), name, Number(r.score) || 0]);
+    const key = normalizeKey(name);
+    const score = Number(r.score) || 0;
+    if (!dedup[key] || score > dedup[key].score) {
+      dedup[key] = { name: name, score: score };
+    }
   });
+  const dedupedRows = Object.keys(dedup).map((key) => dedup[key]);
+  const duplicatesRemoved = rows.filter((r) => String(r.name || "").trim()).length - dedupedRows.length;
+
+  sheet.clearContents();
+  sheet.appendRow(SCORE_COLUMNS);
+  keep.forEach((r) => sheet.appendRow(r));
+  dedupedRows.forEach((r) => sheet.appendRow([String(weekId), r.name, r.score]));
+
+  return { savedCount: dedupedRows.length, duplicatesRemoved: duplicatesRemoved };
 }
 
 /* ---------- Gemini AI (чөлөөт бичвэрийн хариулт vнэлэх) ---------- */
@@ -452,8 +468,8 @@ function doPost(e) {
 
   if (action === "saveScores") {
     if (!body.weekId || !Array.isArray(body.scores)) return jsonResponse({ ok: false, error: "expected_weekid_and_scores" });
-    writeScoresForWeek(body.weekId, body.scores);
-    return jsonResponse({ ok: true });
+    const result = writeScoresForWeek(body.weekId, body.scores);
+    return jsonResponse({ ok: true, savedCount: result.savedCount, duplicatesRemoved: result.duplicatesRemoved });
   }
 
   if (action === "gradeTextAnswers") {

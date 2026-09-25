@@ -378,12 +378,16 @@ function readProgressSummary() {
     totalParticipants: peopleList.length,
     perWeek: perWeek,
     byOrg: Object.keys(byOrg).map((k) => byOrg[k]),
-    people: peopleSorted.map((p) => ({
-      org: p.org,
-      position: p.position,
-      name: p.name,
-      completed: p.completed,
-    })),
+    people: peopleSorted.map((p) => {
+      const scoreKey = normalizeKey(p.name);
+      return {
+        org: p.org,
+        position: p.position,
+        name: p.name,
+        completed: p.completed,
+        score: (scoreTotals[scoreKey] && scoreTotals[scoreKey].total) || 0,
+      };
+    }),
     leaderboard: leaderboard,
   };
 }

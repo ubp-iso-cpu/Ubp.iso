@@ -452,6 +452,14 @@ function renderWeeks(){
   populateScoreWeekSelect();
 }
 
+// Хадгалсны дараа ажилтнуудын сайтад хэзээ тусахыг тодорхой мэдэгдэнэ
+// (Apps Script-ийн publishConfigToGitHub()-ийн буцаасан төлөвөөр).
+function savedMessage(publish){
+  if(publish === "published") return "Амжилттай хадгаллаа. Ажилтнуудын сайтад ~1–2 минутын дотор тусна.";
+  if(publish === "unchanged") return "Амжилттай хадгаллаа. Ажилтнуудын сайт аль хэдийн энэ төлөвтэй байна.";
+  return "Амжилттай хадгаллаа. Ажилтнуудын сайтад 15–25 минутын дотор автоматаар тусна.";
+}
+
 function escapeAttr(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
 function escapeHtml(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
@@ -545,7 +553,7 @@ document.getElementById("saveWeeksBtn").addEventListener("click", async () => {
       statusEl.className = "status err";
       return;
     }
-    statusEl.textContent = "Амжилттай хадгаллаа.";
+    statusEl.textContent = savedMessage(data.publish);
     statusEl.className = "status ok";
   }catch(e){
     statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";
@@ -585,7 +593,7 @@ document.getElementById("saveSiteBtn").addEventListener("click", async () => {
       return;
     }
     siteConfig = site;
-    statusEl.textContent = "Амжилттай хадгаллаа.";
+    statusEl.textContent = savedMessage(data.publish);
     statusEl.className = "status ok";
   }catch(e){
     statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";
@@ -622,7 +630,7 @@ document.getElementById("saveOrgBtn").addEventListener("click", async () => {
       return;
     }
     orgRows = rows;
-    statusEl.textContent = "Амжилттай хадгаллаа.";
+    statusEl.textContent = savedMessage(data.publish);
     statusEl.className = "status ok";
   }catch(e){
     statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";

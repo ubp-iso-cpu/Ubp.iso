@@ -1,5 +1,9 @@
 name: Sync config from Apps Script
 
+# Нөөц синк: админ хадгалах бvрт Apps Script өөрөө config.json-г шууд commit хийдэг
+# (publishConfigToGitHub). Энэ workflow нь Sheet-ийг гараар засах гэх мэт тохиолдолд
+# хоцорсон өөрчлөлтийг барьж авна. GitHub cron-ыг бодит байдалд 15–20 минут тутам л
+# ажиллуулдаг.
 on:
   schedule:
     - cron: "*/5 * * * *"
@@ -8,39 +12,77 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: sync-config
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Fetch and validate latest config from Apps Script (дотооддоо дахин оролдоно)
+      - name: Fetch and validate latest config from Apps Script
+        id: fetch
         run: |
           URL="https://script.google.com/macros/s/AKfycbwq2Oeh5PEyqoT1SAD3HAahmSrOtAYL4n5lUCzGDIWZtI06es05-0v9yfGonSZKIXXv/exec"
+          OUT="$RUNNER_TEMP/config.json.new"
+          persistent=""
           for attempt in 1 2 3 4 5; do
-            echo "Attempt $attempt..."
-            curl -sL --max-time 25 "$URL" -o config.json.new || true
-            if node -e "
-              const fs = require('fs');
-              try {
-                const d = JSON.parse(fs.readFileSync('config.json.new', 'utf8'));
-                process.exit(Array.isArray(d.weeks) ? 0 : 1);
-              } catch (e) { process.exit(1); }
-            "; then
-              echo "Valid JSON received."
-              mv config.json.new config.json
+            code=$(curl -sL --max-time 25 -o "$OUT" -w "%{http_code}" "$URL" || true)
+            if [ "$code" = "200" ] && node -e "
+              const d = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+              process.exit(Array.isArray(d.weeks) ? 0 : 1);
+            " "$OUT" 2>/dev/null; then
+              echo "Valid JSON received (attempt $attempt)."
+              echo "fetched=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            echo "Invalid/failed response, retrying after delay..."
-            sleep $((attempt * 5))
+            # Apps Script-ийн тохиргоо/кодын алдаа (эзэмшигч засах шаардлагатай) — дахин
+            # оролдоод нэмэргvй тул шууд илрvvлнэ.
+            if [ -s "$OUT" ] && grep -qiE "Authorization is required|Script function not found|TypeError|ReferenceError|SyntaxError" "$OUT"; then
+              persistent="yes"
+              break
+            fi
+            echo "Attempt $attempt failed (HTTP ${code:-none}), retrying..."
+            if [ "$attempt" -lt 5 ]; then sleep $((attempt * 5)); fi
           done
-          echo "All attempts failed — Apps Script may be having a transient issue. Leaving existing config.json unchanged."
-          exit 1
+
+          if [ -n "$persistent" ]; then
+            echo "::error title=Apps Script deployment problem::Apps Script returned an authorization or script error. Open the Apps Script editor, redeploy and grant permissions if asked."
+            head -c 600 "$OUT"; echo
+            exit 1
+          fi
+
+          # Тvр зуурын саатал (timeout / 5xx): сайт сvvлийн зөв config.json-оор хэвийн
+          # ажилласаар байгаа тул алдааны имэйл илгээхгvй, зөвхөн анхааруулга vлдээнэ.
+          echo "::warning title=Apps Script temporarily unavailable::All 5 attempts failed (last HTTP ${code:-none}). Keeping the existing config.json; the next run will retry."
+          echo "fetched=false" >> "$GITHUB_OUTPUT"
 
       - name: Commit and push if changed
+        if: steps.fetch.outputs.fetched == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add config.json
-          git diff --staged --quiet || git commit -m "Auto-sync config.json from Apps Script"
-          git push
+          # Apps Script мөн config.json-г шууд commit хийдэг тул push зөрчилдөж болно —
+          # сvvлийн төлөв дээр дахин суурилж 3 хvртэл оролдоно.
+          for attempt in 1 2 3; do
+            git fetch -q origin main
+            git reset -q --hard origin/main
+            cp "$RUNNER_TEMP/config.json.new" config.json
+            git add config.json
+            if git diff --staged --quiet; then
+              echo "config.json already up to date."
+              exit 0
+            fi
+            git commit -q -m "Auto-sync config.json from Apps Script"
+            if git push -q origin HEAD:main; then
+              echo "Pushed updated config.json."
+              exit 0
+            fi
+            echo "Push rejected (concurrent update), retrying..."
+            sleep 3
+          done
+          echo "::error::Could not push config.json after 3 attempts."
+          exit 1

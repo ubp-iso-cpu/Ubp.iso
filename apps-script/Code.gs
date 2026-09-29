@@ -219,6 +219,80 @@ function writeScoresForWeek(weekId, rows) {
   return { savedCount: dedupedRows.length, duplicatesRemoved: duplicatesRemoved };
 }
 
+/* ---------- config.json-г GitHub Pages-д шууд нийтлэх ---------- */
+// GitHub-ийн cron нь "5 минут тутам" гэж тохируулсан ч бодит байдалд 15–20 минут
+// тутам л ажилладаг тул админы өөрчлөлт (жишээ нь сайт хаах) ажилтнуудад хоцорч
+// хvрдэг. Иймд хадгалах бvрт config.json-г GitHub-д шууд commit хийж ~1–2 минутад
+// тусгана; cron workflow нь зөвхөн нөөц болж vлдэнэ.
+// Script Properties → GITHUB_TOKEN: зөвхөн энэ repo-д "Contents: Read and write"
+// эрхтэй fine-grained token. Тохируулаагvй бол зөвхөн cron-оор (хоцорч) шинэчлэгдэнэ.
+const GITHUB_REPO = "ubp-iso-cpu/Ubp.iso";
+const GITHUB_BRANCH = "main";
+const GITHUB_CONFIG_PATH = "config.json";
+
+// doGet болон GitHub-д нийтлэх config.json хоёулаа яг ижил агуулгатай байх ёстой
+// (эс тэгвээс cron болон шууд нийтлэлт ээлжлэн commit хийж "эргэлдэнэ").
+function buildPublicBundle() {
+  return { weeks: readWeeks(), site: readSite(), org: readOrg() };
+}
+
+// Буцаах утга: "published" | "unchanged" | "no_token" | "error".
+// Нийтлэлт амжилтгvй болсон ч Sheet-д хадгалалт аль хэдийн хийгдсэн тул алдаа
+// шидэхгvй — cron нөөцөөр хожуу ч гэсэн шинэчлэгдэнэ.
+function publishConfigToGitHub() {
+  const token = PropertiesService.getScriptProperties().getProperty("GITHUB_TOKEN");
+  if (!token) return "no_token";
+  const json = JSON.stringify(buildPublicBundle());
+  const api = "https://api.github.com/repos/" + GITHUB_REPO + "/contents/" + GITHUB_CONFIG_PATH;
+  const headers = {
+    Authorization: "Bearer " + token,
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+  try {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const getRes = UrlFetchApp.fetch(api + "?ref=" + GITHUB_BRANCH, { headers: headers, muteHttpExceptions: true });
+      const getCode = getRes.getResponseCode();
+      let sha = null;
+      if (getCode === 200) {
+        const cur = JSON.parse(getRes.getContentText());
+        sha = cur.sha;
+        const currentText = Utilities.newBlob(
+          Utilities.base64Decode(String(cur.content || "").replace(/\s/g, ""))
+        ).getDataAsString("UTF-8");
+        if (currentText === json) return "unchanged";
+      } else if (getCode !== 404) {
+        console.warn("GitHub GET " + getCode + ": " + getRes.getContentText().slice(0, 300));
+        return "error";
+      }
+      const payload = {
+        message: "Publish config.json from admin save",
+        content: Utilities.base64Encode(json, Utilities.Charset.UTF_8),
+        branch: GITHUB_BRANCH,
+      };
+      if (sha) payload.sha = sha;
+      const putRes = UrlFetchApp.fetch(api, {
+        method: "put",
+        contentType: "application/json",
+        headers: headers,
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true,
+      });
+      const putCode = putRes.getResponseCode();
+      if (putCode === 200 || putCode === 201) return "published";
+      // 409/422: хооронд нь cron workflow commit хийж sha хуучирсан — дахин оролдоно
+      if (putCode !== 409 && putCode !== 422) {
+        console.warn("GitHub PUT " + putCode + ": " + putRes.getContentText().slice(0, 300));
+        return "error";
+      }
+    }
+    return "error";
+  } catch (err) {
+    console.warn("publishConfigToGitHub: " + err);
+    return "error";
+  }
+}
+
 /* ---------- Gemini AI (чөлөөт бичвэрийн хариулт vнэлэх) ---------- */
 // Google AI Studio-с (aistudio.google.com) vнэгvй авсан API key-г
 // Project Settings → Script Properties → GEMINI_API_KEY нэрээр хадгална.
@@ -413,11 +487,7 @@ function validatePasswordStrength(pw) {
 }
 
 function doGet(e) {
-  return jsonResponse({
-    weeks: readWeeks(),
-    site: readSite(),
-    org: readOrg(),
-  });
+  return jsonResponse(buildPublicBundle());
 }
 
 function doPost(e) {
@@ -455,19 +525,19 @@ function doPost(e) {
   if (action === "saveWeeks") {
     if (!Array.isArray(body.weeks)) return jsonResponse({ ok: false, error: "expected_weeks_array" });
     writeWeeks(body.weeks);
-    return jsonResponse({ ok: true });
+    return jsonResponse({ ok: true, publish: publishConfigToGitHub() });
   }
 
   if (action === "saveSite") {
     if (!body.site || typeof body.site !== "object") return jsonResponse({ ok: false, error: "expected_site_object" });
     writeSite(body.site);
-    return jsonResponse({ ok: true });
+    return jsonResponse({ ok: true, publish: publishConfigToGitHub() });
   }
 
   if (action === "saveOrg") {
     if (!Array.isArray(body.org)) return jsonResponse({ ok: false, error: "expected_org_array" });
     writeOrg(body.org);
-    return jsonResponse({ ok: true });
+    return jsonResponse({ ok: true, publish: publishConfigToGitHub() });
   }
 
   if (action === "saveScores") {

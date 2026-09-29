@@ -392,7 +392,7 @@ function readProgressSummary() {
 
   const peopleList = Object.keys(people).map((k) => people[k]);
 
-  // Сургалт тус бvрийн дуусгасан тооcholder
+  // Сургалт тус бvрийн дуусгасан тоо
   const perWeek = {};
   weekIds.forEach((id) => { perWeek[id] = 0; });
   peopleList.forEach((p) => {

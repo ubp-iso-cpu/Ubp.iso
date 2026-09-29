@@ -457,7 +457,10 @@ function renderWeeks(){
 function savedMessage(publish){
   if(publish === "published") return "Амжилттай хадгаллаа. Ажилтнуудын сайтад ~1–2 минутын дотор тусна.";
   if(publish === "unchanged") return "Амжилттай хадгаллаа. Ажилтнуудын сайт аль хэдийн энэ төлөвтэй байна.";
-  return "Амжилттай хадгаллаа. Ажилтнуудын сайтад 15–25 минутын дотор автоматаар тусна.";
+  const delayed = "Амжилттай хадгаллаа. Ажилтнуудын сайтад 15–25 минутын дотор автоматаар тусна.";
+  if(publish === "no_token") return delayed + " (Шууд нийтлэхийн тулд Script Properties-д GITHUB_TOKEN нэмнэ vv.)";
+  if(publish === "error") return delayed + " (GitHub-д шууд нийтэлж чадсангvй — token-ы эрх: Ubp.iso repo, Contents: Read and write эсэхийг шалгана уу.)";
+  return delayed + " (Apps Script-ийн шинэ хувилбар идэвхжээгvй байж магадгvй — Deploy → Manage deployments → New version хийсэн эсэхээ шалгана уу.)";
 }
 
 function escapeAttr(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }

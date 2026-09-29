@@ -65,10 +65,17 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Apps Script мөн config.json-г шууд commit хийдэг тул push зөрчилдөж болно —
-          # сvvлийн төлөв дээр дахин суурилж 3 хvртэл оролдоно.
+          # Apps Script мөн config.json-г шууд commit хийдэг. Энэ ажиллалт эхэлснээс хойш
+          # main дээрх config.json өөрчлөгдсөн бол тэр нь манай snapshot-оос шинэ байж
+          # болзошгvй тул дарж бичихгvй — дараагийн ажиллалт шинэчилнэ. Бусад файлын
+          # commit-оос болж push татгалзвал сvvлийн төлөв дээр 3 хvртэл дахин оролдоно.
+          START_BLOB=$(git rev-parse HEAD:config.json)
           for attempt in 1 2 3; do
             git fetch -q origin main
+            if [ "$(git rev-parse origin/main:config.json)" != "$START_BLOB" ]; then
+              echo "config.json was updated on main during this run; skipping so newer data is not overwritten."
+              exit 0
+            fi
             git reset -q --hard origin/main
             cp "$RUNNER_TEMP/config.json.new" config.json
             git add config.json

@@ -37,6 +37,25 @@ function getOrCreateSheet(name, headerRow) {
   return sheet;
 }
 
+// "=", "+", "-", "@"-оор эхэлсэн текстийг Sheets томьёо гэж тайлбарладаг (жишээ нь
+// нийтийн logProgress-оор ирсэн =IMPORTXML(...) өгөгдлийг гадагш алдуулна). Урд нь "'"
+// залгаж зөвхөн текст болгоно — уншихад "'" харагдахгvй.
+function safeCell(v) {
+  const s = String(v == null ? "" : v);
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
+}
+
+// Мөр бvрт appendRow хийхийн оронд нэг setValues-ээр бичнэ: хурдан бөгөөд эхлээд бичээд
+// дараа нь илvvдсэн мөрийг цэвэрлэдэг тул алдаа гарвал хуучин өгөгдөл бvтэн vлдэнэ.
+function replaceSheetRows(sheet, header, rows) {
+  const all = [header].concat(rows);
+  sheet.getRange(1, 1, all.length, header.length).setValues(all);
+  const last = sheet.getLastRow();
+  if (last > all.length) {
+    sheet.getRange(all.length + 1, 1, last - all.length, Math.max(header.length, sheet.getLastColumn())).clearContent();
+  }
+}
+
 /* ---------- Weeks ---------- */
 function readWeeks() {
   const sheet = getOrCreateSheet(SHEET_WEEKS, WEEK_COLUMNS);
@@ -57,19 +76,15 @@ function readWeeks() {
 
 function writeWeeks(weeks) {
   const sheet = getOrCreateSheet(SHEET_WEEKS, WEEK_COLUMNS);
-  sheet.clearContents();
-  sheet.appendRow(WEEK_COLUMNS);
-  weeks.forEach((w) => {
-    sheet.appendRow([
-      w.id || "",
-      w.title || "",
-      w.desc || "",
-      extractYoutubeId(w.youtubeId),
-      w.formUrl || "",
-      w.opensAt || "",
-      w.closesAt || "",
-    ]);
-  });
+  replaceSheetRows(sheet, WEEK_COLUMNS, weeks.map((w) => [
+    safeCell(w.id),
+    safeCell(w.title),
+    safeCell(w.desc),
+    extractYoutubeId(w.youtubeId),
+    safeCell(w.formUrl),
+    safeCell(w.opensAt),
+    safeCell(w.closesAt),
+  ]));
 }
 
 // Клиент (хуучин tab, гар аргаар илгээсэн хvсэлт г.м.) ямар ч хэлбэрээр
@@ -86,7 +101,8 @@ function extractYoutubeId(input) {
   m = s.match(/\/embed\/([a-zA-Z0-9_-]{11})/);
   if (m) return m[1];
   m = s.match(/[a-zA-Z0-9_-]{11}/);
-  return m ? m[0] : s;
+  // ID олдохгvй бол оролтыг хэвээр нь хадгалахгvй (ажилтны хуудсанд HTML болж орох эрсдэлтэй).
+  return m ? m[0] : "";
 }
 
 function formatDateCell(v) {
@@ -116,11 +132,7 @@ function readSite() {
 
 function writeSite(site) {
   const sheet = getOrCreateSheet(SHEET_CONFIG, ["key", "value"]);
-  sheet.clearContents();
-  sheet.appendRow(["key", "value"]);
-  Object.keys(site).forEach((key) => {
-    sheet.appendRow([key, site[key] || ""]);
-  });
+  replaceSheetRows(sheet, ["key", "value"], Object.keys(site).map((key) => [safeCell(key), safeCell(site[key])]));
 }
 
 /* ---------- Org structure (алба нэгж <-> албан тушаал, мөр бvр нэг хос) ---------- */
@@ -138,13 +150,13 @@ function readOrg() {
 
 function writeOrg(rows) {
   const sheet = getOrCreateSheet(SHEET_ORG, ["department", "position"]);
-  sheet.clearContents();
-  sheet.appendRow(["department", "position"]);
+  const out = [];
   rows.forEach((r) => {
     const dept = String((r.department != null ? r.department : "")).trim();
     const pos = String((r.position != null ? r.position : "")).trim();
-    if (dept) sheet.appendRow([dept, pos]);
+    if (dept) out.push([safeCell(dept), safeCell(pos)]);
   });
+  replaceSheetRows(sheet, ["department", "position"], out);
 }
 
 // Нэрийг том/жижиг vсэг, зайн ялгаа vл хамааран харьцуулах түлхvvр болгож жигдэлнэ
@@ -162,15 +174,19 @@ function resetProgress() {
   sheet.appendRow(PROGRESS_COLUMNS);
 }
 
+// Ажилтны хуудас зөвхөн эдгээр vйл явдлыг илгээдэг — нийтийн endpoint тул бусдыг хvлээж авахгvй.
+const PROGRESS_EVENTS = ["login", "video_completed"];
+
 function logProgress(entry) {
   const sheet = getOrCreateSheet(SHEET_PROGRESS, PROGRESS_COLUMNS);
+  const clip = (v) => safeCell(String(v == null ? "" : v).slice(0, 200));
   sheet.appendRow([
     new Date().toISOString(),
-    String(entry.org || ""),
-    String(entry.position || ""),
-    String(entry.name || ""),
-    String(entry.weekId || ""),
-    String(entry.event || ""),
+    clip(entry.org),
+    clip(entry.position),
+    clip(entry.name),
+    clip(entry.weekId),
+    clip(entry.event),
   ]);
 }
 
@@ -207,24 +223,24 @@ function readRevisions() {
   };
 }
 
-// Шалгах–бичих–дугаар өсгөх гурвыг lock дотор хийнэ. Агуулга бодитоор өөрчлөгдсөн
-// vед л дугаарыг өсгөнө (өөрчлөлтгvй хадгалалт бусад цонхыг хуучруулахгvй).
-// baseRev ирээгvй бол (хуучин admin.html) шалгалтгvйгээр хадгална.
+// Шалгах–бичих–дугаар өсгөх–нийтлэх дөрвийг lock дотор хийнэ. Агуулга бодитоор
+// өөрчлөгдсөн vед л дугаарыг өсгөнө (өөрчлөлтгvй хадгалалт бусад цонхыг хуучруулахгvй).
+// Нийтлэлтийг lock дотор хийснээр зэрэг хадгалалтын хуучин snapshot шинийг дарахгvй.
+// baseRev-гvй хvсэлт (хуучирсан admin.html) бусдын засварыг дарах эрсдэлтэй тул татгалзана.
 function saveSection(section, baseRev, readFn, writeFn) {
   const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  lock.waitLock(30000);
   try {
     const props = PropertiesService.getScriptProperties();
     const current = Number(props.getProperty(REV_KEYS[section])) || 0;
-    if (baseRev !== undefined && baseRev !== null && Number(baseRev) !== current) {
-      return { conflict: true, rev: current };
-    }
+    if (baseRev === undefined || baseRev === null) return { error: "outdated_client", rev: current };
+    if (Number(baseRev) !== current) return { error: "conflict", rev: current };
     const before = JSON.stringify(readFn());
     writeFn();
     const changed = JSON.stringify(readFn()) !== before;
     const rev = changed ? current + 1 : current;
     if (changed) props.setProperty(REV_KEYS[section], String(rev));
-    return { conflict: false, rev: rev };
+    return { rev: rev, publish: publishConfigToGitHub() };
   } finally {
     lock.releaseLock();
   }
@@ -294,10 +310,10 @@ function publishConfigToGitHub() {
   }
 }
 
-// Админ хадгалсны дараа config.json-г нийтэлж, vр дvнг хариунд хавсаргана.
+// saveSection-ийн vр дvнг (нийтлэлтийн төлөвийн хамт) админд буцаана.
 function savedResponse(saved) {
-  if (saved.conflict) return jsonResponse({ ok: false, error: "conflict", rev: saved.rev });
-  const p = publishConfigToGitHub();
+  if (saved.error) return jsonResponse({ ok: false, error: saved.error, rev: saved.rev });
+  const p = saved.publish;
   return jsonResponse({ ok: true, rev: saved.rev, publish: p.status, publishCode: p.code || 0, publishDetail: p.detail || "" });
 }
 
@@ -365,12 +381,7 @@ function readProgressSummary() {
     totalParticipants: peopleList.length,
     perWeek: perWeek,
     byOrg: Object.keys(byOrg).map((k) => byOrg[k]),
-    people: peopleSorted.map((p) => ({
-      org: p.org,
-      position: p.position,
-      name: p.name,
-      completed: p.completed,
-    })),
+    people: peopleSorted,
   };
 }
 
@@ -384,6 +395,21 @@ function jsonResponse(obj) {
 function checkPassword(body) {
   const adminPassword = PropertiesService.getScriptProperties().getProperty("ADMIN_PASSWORD");
   return !!adminPassword && body.password === adminPassword;
+}
+
+// Web app-ийн URL ажилтны хуудсаар дамжин нийтэд ил тул нууц vгийг хязгааргvй таах
+// боломжтой байсан. 15 минутад 20-оос олон буруу оролдлого гарвал тvр хаана.
+const LOGIN_FAIL_KEY = "pw_fail_count";
+const LOGIN_FAIL_LIMIT = 20;
+const LOGIN_FAIL_WINDOW_SEC = 900;
+
+function tooManyFailedLogins() {
+  return Number(CacheService.getScriptCache().get(LOGIN_FAIL_KEY) || 0) >= LOGIN_FAIL_LIMIT;
+}
+
+function recordFailedLogin() {
+  const cache = CacheService.getScriptCache();
+  cache.put(LOGIN_FAIL_KEY, String(Number(cache.get(LOGIN_FAIL_KEY) || 0) + 1), LOGIN_FAIL_WINDOW_SEC);
 }
 
 // Хоосон биш буцаах утга нь тохирохгvй шалтгааныг илэрхийлнэ.
@@ -410,7 +436,7 @@ function doPost(e) {
 
   // Хэрэглэгчийн явцын бvртгэл — нууц vг шаардахгvй, олон нийтэд нээлттэй.
   if (action === "logProgress") {
-    if (!body.name || !body.event) {
+    if (!body.name || PROGRESS_EVENTS.indexOf(body.event) === -1) {
       return jsonResponse({ ok: false, error: "missing_fields" });
     }
     logProgress(body);
@@ -418,7 +444,11 @@ function doPost(e) {
   }
 
   // Vлдсэн бvх vйлдэл админ нууц vг шаардана.
+  if (tooManyFailedLogins()) {
+    return jsonResponse({ ok: false, error: "too_many_attempts" });
+  }
   if (!checkPassword(body)) {
+    recordFailedLogin();
     return jsonResponse({ ok: false, error: "unauthorized" });
   }
 

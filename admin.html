@@ -264,10 +264,14 @@ let orgRows = []; // [{department, position}]
 // дугааргvй бол null — тэр vед шалгалтгvйгээр (өмнөх шигээ) хадгална.
 let rev = null;
 
-function saveErrorMessage(data){
-  if(data.error === "unauthorized") return "Нууц vг буруу.";
+// Сервер талын алдааны кодыг админд ойлгомжтой болгоно (нэвтрэх, хадгалах хоёуланд).
+function serverErrorMessage(data){
+  if(data.error === "unauthorized") return "Нууц vг буруу байна.";
+  if(data.error === "too_many_attempts") return "Хэт олон буруу нууц vг оруулсан тул тvр хаагдлаа. 15 минутын дараа дахин оролдоно уу.";
+  if(data.error === "unknown_action") return "Apps Script-ийн хувилбар хуучин байна — Deploy → Manage deployments → ✎ Edit → New version хийнэ vv.";
   if(data.error === "conflict") return "⚠ Хадгалсангvй: энэ хэсгийг таныг нээснээс хойш өөр цонх эсвэл өөр админ өөрчилсөн байна. Бусдын засварыг дарж устгахгvйн тулд таны өөрчлөлтийг бичээгvй. Өөрчлөлтөө хуулж аваад хуудсыг дахин ачаалж (Ctrl+Shift+R), дахин оруулна уу.";
-  return "Алдаа гарлаа.";
+  if(data.error === "outdated_client") return "⚠ Хадгалсангvй: энэ хуудас хуучин хувилбар байна. Өөрчлөлтөө хуулж аваад хуудсыг дахин ачаалж (Ctrl+Shift+R), дахин оруулна уу.";
+  return "Алдаа гарлаа (" + (data.error || "тодорхойгvй") + ").";
 }
 
 // Амжилттай хадгалсны дараа энэ цонхны хувилбарыг шинэчилнэ (дараагийн хадгалалт зөрчилгvй байхын тулд).
@@ -511,7 +515,7 @@ document.getElementById("saveWeeksBtn").addEventListener("click", async () => {
   try{
     const data = await callAppsScript({ action: "saveWeeks", password: ADMIN_PASSWORD, weeks, baseRev: rev ? rev.weeks : undefined });
     if(!data.ok){
-      statusEl.textContent = saveErrorMessage(data);
+      statusEl.textContent = serverErrorMessage(data);
       statusEl.className = "status err";
       return;
     }
@@ -551,7 +555,7 @@ document.getElementById("saveSiteBtn").addEventListener("click", async () => {
   try{
     const data = await callAppsScript({ action: "saveSite", password: ADMIN_PASSWORD, site, baseRev: rev ? rev.site : undefined });
     if(!data.ok){
-      statusEl.textContent = saveErrorMessage(data);
+      statusEl.textContent = serverErrorMessage(data);
       statusEl.className = "status err";
       return;
     }
@@ -589,7 +593,7 @@ document.getElementById("saveOrgBtn").addEventListener("click", async () => {
   try{
     const data = await callAppsScript({ action: "saveOrg", password: ADMIN_PASSWORD, org: rows, baseRev: rev ? rev.org : undefined });
     if(!data.ok){
-      statusEl.textContent = saveErrorMessage(data);
+      statusEl.textContent = serverErrorMessage(data);
       statusEl.className = "status err";
       return;
     }
@@ -839,18 +843,20 @@ async function tryLogin(){
   const pw = pwInput.value;
   pwSubmit.disabled = true;
   try{
-    const bundle = await fetchBundleWithRetry(3);
-
-    // youtubeId талбаруудыг эндээс цэвэрлэнэ (өмнөх stale session-ээс vлдсэн бvтэн URL байвал засна)
-    (bundle.weeks || []).forEach((w) => { w.youtubeId = extractYoutubeId(w.youtubeId); });
-
+    // Хоёр хvсэлтийг зэрэг илгээнэ; нууц vг буруу бол өгөгдлийг хvлээлгvйгээр шууд мэдэгдэнэ.
+    const bundlePromise = fetchBundleWithRetry(3);
+    bundlePromise.catch(() => {});
     // Нууц vгийг юу ч бичихгvйгээр шалгана.
     const data = await callAppsScript({ action: "verifyPassword", password: pw });
     if(!data.ok){
-      pwErr.textContent = "Нууц vг буруу байна.";
+      pwErr.textContent = serverErrorMessage(data);
       pwErr.hidden = false;
       return;
     }
+    const bundle = await bundlePromise;
+
+    // youtubeId талбаруудыг эндээс цэвэрлэнэ (өмнөх stale session-ээс vлдсэн бvтэн URL байвал засна)
+    (bundle.weeks || []).forEach((w) => { w.youtubeId = extractYoutubeId(w.youtubeId); });
 
     // Хувилбарыг өгөгдөлтэй НЭГ хариунаас авна — хоёр өөр хvсэлтээс авбал хооронд нь
     // хийгдсэн хадгалалтыг анзаарахгvй орхих эрсдэлтэй.
@@ -865,7 +871,7 @@ async function tryLogin(){
     renderSite();
     renderOrgs();
   }catch(e){
-    pwErr.textContent = "Мэдээлэл татахад алдаа гарлаа.";
+    pwErr.textContent = "Сервертэй холбогдож чадсангvй (" + ((e && e.message) || e) + "). Хэдэн секундын дараа дахин оролдоно уу.";
     pwErr.hidden = false;
   }finally{
     pwSubmit.disabled = false;

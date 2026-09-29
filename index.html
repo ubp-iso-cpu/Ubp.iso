@@ -317,9 +317,11 @@ document.getElementById("loginForm").addEventListener("submit", (e) => {
   }
   const identity = { org, position, name };
   saveIdentity(identity);
-  logProgressEvent("login", "");
-  // Хэрэглэгч бvр өөрийн явцаа зөв харахын тулд шинэ identity-ээр бvрэн дахин ачаална
-  location.reload();
+  // Хэрэглэгч бvр өөрийн явцаа зөв харахын тулд шинэ identity-ээр бvрэн дахин ачаална.
+  // Шууд reload хийвэл "login" хvсэлт тасарч, видео дуусгаагvй хvн тайланд огт орохгvй
+  // байсан тул бичлэгийг хvлээнэ (хамгийн ихдээ 1.5 сек; keepalive нь үлдсэнийг нь дуусгана).
+  Promise.race([logProgressEvent("login", ""), new Promise((r) => setTimeout(r, 1500))])
+    .then(() => location.reload());
 });
 document.getElementById("switchUserBtn").addEventListener("click", () => {
   localStorage.removeItem(IDENTITY_KEY);
@@ -332,6 +334,7 @@ async function logProgressEvent(eventName, weekId){
   try{
     await fetch(APPS_SCRIPT_URL, {
       method: "POST",
+      keepalive: true,
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
         action: "logProgress",
@@ -781,7 +784,7 @@ const _initRetryTimer = setInterval(() => {
                 Видео ачаалахад удаж байна.<br>
                 Интернэт холболт удаан эсвэл YouTube хандалт хязгаарлагдсан байж болзошгvй.<br>
                 <button class="btn" type="button" onclick="location.reload()" style="margin-top:10px;">Дахин ачаалах</button><br><br>
-                <a href="https://www.youtube.com/watch?v=${week.youtubeId}" target="_blank" rel="noopener" style="color:#9fd6b8;">YouTube дээр шууд нээх</a>
+                <a href="https://www.youtube.com/watch?v=${encodeURIComponent(week.youtubeId)}" target="_blank" rel="noopener" style="color:#9fd6b8;">YouTube дээр шууд нээх</a>
               </div>`;
           }
         }

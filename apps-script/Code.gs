@@ -236,12 +236,22 @@ function buildPublicBundle() {
   return { weeks: readWeeks(), site: readSite(), org: readOrg() };
 }
 
-// Буцаах утга: "published" | "unchanged" | "no_token" | "error".
+function githubErrorMessage(res) {
+  try {
+    return String(JSON.parse(res.getContentText()).message || "");
+  } catch (e) {
+    return res.getContentText().slice(0, 200);
+  }
+}
+
+// Буцаах утга: { status: "published" | "unchanged" | "no_token" | "error", code, detail }.
 // Нийтлэлт амжилтгvй болсон ч Sheet-д хадгалалт аль хэдийн хийгдсэн тул алдаа
-// шидэхгvй — cron нөөцөөр хожуу ч гэсэн шинэчлэгдэнэ.
+// шидэхгvй — cron нөөцөөр хожуу ч гэсэн шинэчлэгдэнэ. Web app-ийн лог Executions-д
+// ихэвчлэн харагддаггvй тул шалтгааныг (code/detail) админд шууд буцаана.
 function publishConfigToGitHub() {
-  const token = PropertiesService.getScriptProperties().getProperty("GITHUB_TOKEN");
-  if (!token) return "no_token";
+  // Хуулж тавихад санамсаргvй орсон зай/мөр шилжилтийг арилгана.
+  const token = String(PropertiesService.getScriptProperties().getProperty("GITHUB_TOKEN") || "").trim();
+  if (!token) return { status: "no_token" };
   const json = JSON.stringify(buildPublicBundle());
   const api = "https://api.github.com/repos/" + GITHUB_REPO + "/contents/" + GITHUB_CONFIG_PATH;
   const headers = {
@@ -260,10 +270,9 @@ function publishConfigToGitHub() {
         const currentText = Utilities.newBlob(
           Utilities.base64Decode(String(cur.content || "").replace(/\s/g, ""))
         ).getDataAsString("UTF-8");
-        if (currentText === json) return "unchanged";
+        if (currentText === json) return { status: "unchanged" };
       } else if (getCode !== 404) {
-        console.warn("GitHub GET " + getCode + ": " + getRes.getContentText().slice(0, 300));
-        return "error";
+        return { status: "error", code: getCode, detail: "GET " + getCode + ": " + githubErrorMessage(getRes) };
       }
       const payload = {
         message: "Publish config.json from admin save",
@@ -279,18 +288,22 @@ function publishConfigToGitHub() {
         muteHttpExceptions: true,
       });
       const putCode = putRes.getResponseCode();
-      if (putCode === 200 || putCode === 201) return "published";
+      if (putCode === 200 || putCode === 201) return { status: "published" };
       // 409/422: хооронд нь cron workflow commit хийж sha хуучирсан — дахин оролдоно
       if (putCode !== 409 && putCode !== 422) {
-        console.warn("GitHub PUT " + putCode + ": " + putRes.getContentText().slice(0, 300));
-        return "error";
+        return { status: "error", code: putCode, detail: "PUT " + putCode + ": " + githubErrorMessage(putRes) };
       }
     }
-    return "error";
+    return { status: "error", code: 409, detail: "PUT 409: config.json зэрэг өөрчлөгдөж байна, дахин хадгална уу" };
   } catch (err) {
-    console.warn("publishConfigToGitHub: " + err);
-    return "error";
+    return { status: "error", code: 0, detail: String(err) };
   }
+}
+
+// Админ хадгалсны дараа config.json-г нийтэлж, vр дvнг хариунд хавсаргана.
+function savedResponse() {
+  const p = publishConfigToGitHub();
+  return jsonResponse({ ok: true, publish: p.status, publishCode: p.code || 0, publishDetail: p.detail || "" });
 }
 
 /* ---------- Gemini AI (чөлөөт бичвэрийн хариулт vнэлэх) ---------- */
@@ -525,19 +538,19 @@ function doPost(e) {
   if (action === "saveWeeks") {
     if (!Array.isArray(body.weeks)) return jsonResponse({ ok: false, error: "expected_weeks_array" });
     writeWeeks(body.weeks);
-    return jsonResponse({ ok: true, publish: publishConfigToGitHub() });
+    return savedResponse();
   }
 
   if (action === "saveSite") {
     if (!body.site || typeof body.site !== "object") return jsonResponse({ ok: false, error: "expected_site_object" });
     writeSite(body.site);
-    return jsonResponse({ ok: true, publish: publishConfigToGitHub() });
+    return savedResponse();
   }
 
   if (action === "saveOrg") {
     if (!Array.isArray(body.org)) return jsonResponse({ ok: false, error: "expected_org_array" });
     writeOrg(body.org);
-    return jsonResponse({ ok: true, publish: publishConfigToGitHub() });
+    return savedResponse();
   }
 
   if (action === "saveScores") {

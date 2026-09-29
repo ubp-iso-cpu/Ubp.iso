@@ -454,13 +454,27 @@ function renderWeeks(){
 
 // Хадгалсны дараа ажилтнуудын сайтад хэзээ тусахыг тодорхой мэдэгдэнэ
 // (Apps Script-ийн publishConfigToGitHub()-ийн буцаасан төлөвөөр).
-function savedMessage(publish){
+function savedMessage(data){
+  const publish = data.publish;
   if(publish === "published") return "Амжилттай хадгаллаа. Ажилтнуудын сайтад ~1–2 минутын дотор тусна.";
   if(publish === "unchanged") return "Амжилттай хадгаллаа. Ажилтнуудын сайт аль хэдийн энэ төлөвтэй байна.";
   const delayed = "Амжилттай хадгаллаа. Ажилтнуудын сайтад 15–25 минутын дотор автоматаар тусна.";
   if(publish === "no_token") return delayed + " (Шууд нийтлэхийн тулд Script Properties-д GITHUB_TOKEN нэмнэ vv.)";
-  if(publish === "error") return delayed + " (GitHub-д шууд нийтэлж чадсангvй — token-ы эрх: Ubp.iso repo, Contents: Read and write эсэхийг шалгана уу.)";
+  if(publish === "error") return delayed + " (GitHub-д шууд нийтэлж чадсангvй: " + publishHint(data) + ")";
   return delayed + " (Apps Script-ийн шинэ хувилбар идэвхжээгvй байж магадгvй — Deploy → Manage deployments → New version хийсэн эсэхээ шалгана уу.)";
+}
+
+// GitHub-ийн буцаасан кодыг админд ойлгомжтой, засах арга бvхий зөвлөгөө болгоно.
+function publishHint(data){
+  const code = Number(data.publishCode) || 0;
+  const detail = String(data.publishDetail || "");
+  let hint;
+  if(code === 401) hint = "token буруу эсвэл хугацаа нь дууссан — Script Properties-д бvтнээр нь хуулсан эсэхийг шалгана уу";
+  else if(code === 403) hint = "token-д Ubp.iso repo-д бичих эрх алга — Repository access-д Ubp.iso сонгогдсон, Contents: Read and write эсэхийг шалгана уу";
+  else if(code === 404) hint = "token Ubp.iso repo-г харж чадахгvй байна — Resource owner нь ubp-iso-cpu, Ubp.iso сонгогдсон эсэхийг шалгана уу";
+  else if(/permission|authoriz/i.test(detail)) hint = "Apps Script-д гадагш хандах зөвшөөрөл өгөөгvй — editor дээр Run дарж Allow зөвшөөрнө vv";
+  else hint = "тодорхойгvй алдаа";
+  return hint + (detail ? " [" + detail + "]" : "");
 }
 
 function escapeAttr(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
@@ -556,7 +570,7 @@ document.getElementById("saveWeeksBtn").addEventListener("click", async () => {
       statusEl.className = "status err";
       return;
     }
-    statusEl.textContent = savedMessage(data.publish);
+    statusEl.textContent = savedMessage(data);
     statusEl.className = "status ok";
   }catch(e){
     statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";
@@ -596,7 +610,7 @@ document.getElementById("saveSiteBtn").addEventListener("click", async () => {
       return;
     }
     siteConfig = site;
-    statusEl.textContent = savedMessage(data.publish);
+    statusEl.textContent = savedMessage(data);
     statusEl.className = "status ok";
   }catch(e){
     statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";
@@ -633,7 +647,7 @@ document.getElementById("saveOrgBtn").addEventListener("click", async () => {
       return;
     }
     orgRows = rows;
-    statusEl.textContent = savedMessage(data.publish);
+    statusEl.textContent = savedMessage(data);
     statusEl.className = "status ok";
   }catch(e){
     statusEl.textContent = "Алдаа гарлаа, дахин оролдоно уу.";

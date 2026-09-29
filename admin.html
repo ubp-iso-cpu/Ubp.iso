@@ -844,12 +844,8 @@ async function tryLogin(){
     // youtubeId талбаруудыг эндээс цэвэрлэнэ (өмнөх stale session-ээс vлдсэн бvтэн URL байвал засна)
     (bundle.weeks || []).forEach((w) => { w.youtubeId = extractYoutubeId(w.youtubeId); });
 
-    // Нууц vгийг юу ч бичихгvйгээр шалгана. Хуучин backend энэ vйлдлийг танихгvй бол
-    // (unknown_action) өмнөх шигээ өгөгдлийг буцааж бичих аргаар шалгана.
-    let data = await callAppsScript({ action: "verifyPassword", password: pw });
-    if(data.error === "unknown_action"){
-      data = await callAppsScript({ action: "saveWeeks", password: pw, weeks: bundle.weeks });
-    }
+    // Нууц vгийг юу ч бичихгvйгээр шалгана.
+    const data = await callAppsScript({ action: "verifyPassword", password: pw });
     if(!data.ok){
       pwErr.textContent = "Нууц vг буруу байна.";
       pwErr.hidden = false;

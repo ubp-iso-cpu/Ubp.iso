@@ -10,7 +10,6 @@ const SHEET_WEEKS = "Weeks";
 const SHEET_CONFIG = "Config";
 const SHEET_ORG = "OrgStructure";
 const SHEET_PROGRESS = "Progress";
-const SHEET_SCORES = "Scores";
 
 const WEEK_COLUMNS = ["id", "title", "desc", "youtubeId", "formUrl", "opensAt", "closesAt"];
 
@@ -175,50 +174,6 @@ function logProgress(entry) {
   ]);
 }
 
-/* ---------- Scores (Microsoft Forms Quiz-с Excel-ээр оруулсан оноо) ---------- */
-const SCORE_COLUMNS = ["weekId", "name", "score"];
-
-function readScores() {
-  const sheet = getOrCreateSheet(SHEET_SCORES, SCORE_COLUMNS);
-  const values = sheet.getDataRange().getValues();
-  return values
-    .slice(1)
-    .filter((r) => r[1])
-    .map((r) => ({ weekId: String(r[0] || ""), name: String(r[1] || ""), score: Number(r[2]) || 0 }));
-}
-
-// Тухайн сургалтын өмнөх онооны мөрvvдийг арилгаад, шинээр оруулсан Excel-ийн
-// өгөгдлөөр сольж бичнэ (давхар оруулбал давхардахгvй байхын тулд).
-function writeScoresForWeek(weekId, rows) {
-  const sheet = getOrCreateSheet(SHEET_SCORES, SCORE_COLUMNS);
-  const values = sheet.getDataRange().getValues();
-  const keep = values.slice(1).filter((r) => String(r[0] || "") !== String(weekId) && r[1]);
-
-  // Нэг хvн Quiz-ийг хэд хэдэн удаа бөглөсөн тохиолдолд (Microsoft Forms дахин
-  // бөглөхийг хориглодоггvй тул Excel-д нэг хvн хэд хэдэн мөрөнд орж болно) —
-  // онооныг нэмэлгvй, зөвхөн хамгийн өндөр оноог нь тооцно. Ингэхгvй бол
-  // тухайн хvний нийт оноо мөр давхарласан тоогоор хэд дахин нэмэгдэж гарна.
-  const dedup = {}; // normalizedName -> {name, score}
-  rows.forEach((r) => {
-    const name = String(r.name || "").trim();
-    if (!name) return;
-    const key = normalizeKey(name);
-    const score = Number(r.score) || 0;
-    if (!dedup[key] || score > dedup[key].score) {
-      dedup[key] = { name: name, score: score };
-    }
-  });
-  const dedupedRows = Object.keys(dedup).map((key) => dedup[key]);
-  const duplicatesRemoved = rows.filter((r) => String(r.name || "").trim()).length - dedupedRows.length;
-
-  sheet.clearContents();
-  sheet.appendRow(SCORE_COLUMNS);
-  keep.forEach((r) => sheet.appendRow(r));
-  dedupedRows.forEach((r) => sheet.appendRow([String(weekId), r.name, r.score]));
-
-  return { savedCount: dedupedRows.length, duplicatesRemoved: duplicatesRemoved };
-}
-
 /* ---------- config.json-г GitHub Pages-д шууд нийтлэх ---------- */
 // GitHub-ийн cron нь "5 минут тутам" гэж тохируулсан ч бодит байдалд 15–20 минут
 // тутам л ажилладаг тул админы өөрчлөлт (жишээ нь сайт хаах) ажилтнуудад хоцорч
@@ -346,74 +301,6 @@ function savedResponse(saved) {
   return jsonResponse({ ok: true, rev: saved.rev, publish: p.status, publishCode: p.code || 0, publishDetail: p.detail || "" });
 }
 
-/* ---------- Gemini AI (чөлөөт бичвэрийн хариулт vнэлэх) ---------- */
-// Google AI Studio-с (aistudio.google.com) vнэгvй авсан API key-г
-// Project Settings → Script Properties → GEMINI_API_KEY нэрээр хадгална.
-const GEMINI_MODEL = "gemini-2.0-flash";
-
-function callGemini(prompt) {
-  const apiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
-  if (!apiKey) throw new Error("missing_gemini_key");
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + apiKey;
-  const payload = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { responseMimeType: "application/json" },
-  };
-  const res = UrlFetchApp.fetch(url, {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true,
-  });
-  const code = res.getResponseCode();
-  if (code !== 200) throw new Error("gemini_http_" + code + ": " + res.getContentText().slice(0, 300));
-  const data = JSON.parse(res.getContentText());
-  const text = data.candidates &&
-    data.candidates[0] &&
-    data.candidates[0].content &&
-    data.candidates[0].content.parts &&
-    data.candidates[0].content.parts[0] &&
-    data.candidates[0].content.parts[0].text;
-  if (!text) throw new Error("gemini_empty_response");
-  return text;
-}
-
-// answers: [{name, text}] — нэг Gemini дуудлагад хэт олон хvнийг оруулбал
-// хариу урт болж алдаа гарах эрсдэлтэй тул дуудагч тал BATCH_SIZE-аар хуваана.
-function gradeTextAnswersBatch(question, maxPoints, rubric, answers) {
-  const prompt =
-    "Чи Монгол хэл дээрх ажилтны сургалтын шалгалтын чөлөөт бичвэрийн хариултуудыг vнэлж буй туслах.\n" +
-    'Асуулт: "' + question + '"\n' +
-    "Дээд оноо (асуулт тус бvрд): " + maxPoints + "\n" +
-    (rubric ? "Оноо өгөх шалгуур: " + rubric + "\n" : "") +
-    "Доорх хvн бvрийн хариултыг уншиж, 0-ээс " + maxPoints + " хvртэлх бvхэл тоон оноо өг. " +
-    "Хариулаагvй эсвэл огт хамааралгvй бол 0 өг. " +
-    "Зөвхөн доорх форматтай JSON массив буцаа, өөр vг нэмэхгvй:\n" +
-    '[{"name": "...", "score": 0, "reason": "богино (10-15 vгтэй) тайлбар"}, ...]\n\n' +
-    "Хариултууд:\n" +
-    answers.map((a, i) => (i + 1) + ". Нэр: " + a.name + " | Хариулт: " + (a.text || "(хариулаагvй)")).join("\n");
-
-  const raw = callGemini(prompt);
-  let cleaned = raw.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "");
-  const parsed = JSON.parse(cleaned);
-  if (!Array.isArray(parsed)) throw new Error("gemini_bad_format");
-  return parsed.map((r) => ({
-    name: String(r.name || ""),
-    score: Math.max(0, Math.min(maxPoints, Math.round(Number(r.score) || 0))),
-    reason: String(r.reason || ""),
-  }));
-}
-
-function gradeTextAnswers(question, maxPoints, rubric, answers) {
-  const BATCH_SIZE = 25;
-  let results = [];
-  for (let i = 0; i < answers.length; i += BATCH_SIZE) {
-    const chunk = answers.slice(i, i + BATCH_SIZE);
-    results = results.concat(gradeTextAnswersBatch(question, maxPoints, rubric, chunk));
-  }
-  return results;
-}
-
 function readProgressSummary() {
   const sheet = getOrCreateSheet(SHEET_PROGRESS, PROGRESS_COLUMNS);
   const values = sheet.getDataRange().getValues();
@@ -472,50 +359,18 @@ function readProgressSummary() {
     return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
   });
 
-  // Онооны тэргvvлэгчид: Excel-ээр оруулсан оноог (Scores) нэр тус бvрээр нэгтгэж,
-  // боломжтой бол бvртгэлтэй хvний алба/тушаалтай тааруулна (нэрээр normalize хийж).
-  const peopleByName = {};
-  peopleList.forEach((p) => {
-    const k = normalizeKey(p.name);
-    if (k && !peopleByName[k]) peopleByName[k] = p;
-  });
-  const scoreTotals = {}; // normalizedName -> {name, total}
-  readScores().forEach((r) => {
-    const key = normalizeKey(r.name);
-    if (!key) return;
-    if (!scoreTotals[key]) scoreTotals[key] = { name: r.name, total: 0 };
-    scoreTotals[key].total += r.score;
-  });
-  const leaderboard = Object.keys(scoreTotals)
-    .map((key) => {
-      const matched = peopleByName[key];
-      return {
-        name: matched ? matched.name : scoreTotals[key].name,
-        org: matched ? matched.org : "",
-        position: matched ? matched.position : "",
-        score: scoreTotals[key].total,
-        matched: !!matched,
-      };
-    })
-    .sort((a, b) => b.score - a.score);
-
   return {
     weekIds: weekIds,
     weekTitles: weeks.map((w) => w.title),
     totalParticipants: peopleList.length,
     perWeek: perWeek,
     byOrg: Object.keys(byOrg).map((k) => byOrg[k]),
-    people: peopleSorted.map((p) => {
-      const scoreKey = normalizeKey(p.name);
-      return {
-        org: p.org,
-        position: p.position,
-        name: p.name,
-        completed: p.completed,
-        score: (scoreTotals[scoreKey] && scoreTotals[scoreKey].total) || 0,
-      };
-    }),
-    leaderboard: leaderboard,
+    people: peopleSorted.map((p) => ({
+      org: p.org,
+      position: p.position,
+      name: p.name,
+      completed: p.completed,
+    })),
   };
 }
 
@@ -593,26 +448,6 @@ function doPost(e) {
   if (action === "saveOrg") {
     if (!Array.isArray(body.org)) return jsonResponse({ ok: false, error: "expected_org_array" });
     return savedResponse(saveSection("org", body.baseRev, readOrg, () => writeOrg(body.org)));
-  }
-
-  if (action === "saveScores") {
-    if (!body.weekId || !Array.isArray(body.scores)) return jsonResponse({ ok: false, error: "expected_weekid_and_scores" });
-    const result = writeScoresForWeek(body.weekId, body.scores);
-    return jsonResponse({ ok: true, savedCount: result.savedCount, duplicatesRemoved: result.duplicatesRemoved });
-  }
-
-  if (action === "gradeTextAnswers") {
-    if (!body.question || !Array.isArray(body.answers)) return jsonResponse({ ok: false, error: "expected_question_and_answers" });
-    try {
-      const maxPoints = Number(body.maxPoints) || 1;
-      const rubric = String(body.rubric || "");
-      const results = gradeTextAnswers(String(body.question), maxPoints, rubric, body.answers);
-      return jsonResponse({ ok: true, results: results });
-    } catch (err) {
-      const msg = String(err);
-      if (msg.indexOf("missing_gemini_key") !== -1) return jsonResponse({ ok: false, error: "missing_gemini_key" });
-      return jsonResponse({ ok: false, error: "gemini_failed", message: msg });
-    }
   }
 
   if (action === "getSummary") {

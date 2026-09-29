@@ -328,6 +328,20 @@ let ADMIN_PASSWORD = "";
 let weeks = [];
 let siteConfig = {};
 let orgRows = []; // [{department, position}]
+// Нэвтрэх vед ачаалсан өгөгдлийн хувилбар ({weeks, site, org}). Хуучин backend
+// дугааргvй бол null — тэр vед шалгалтгvйгээр (өмнөх шигээ) хадгална.
+let rev = null;
+
+function saveErrorMessage(data){
+  if(data.error === "unauthorized") return "Нууц vг буруу.";
+  if(data.error === "conflict") return "⚠ Хадгалсангvй: энэ хэсгийг таныг нээснээс хойш өөр цонх эсвэл өөр админ өөрчилсөн байна. Бусдын засварыг дарж устгахгvйн тулд таны өөрчлөлтийг бичээгvй. Өөрчлөлтөө хуулж аваад хуудсыг дахин ачаалж (Ctrl+Shift+R), дахин оруулна уу.";
+  return "Алдаа гарлаа.";
+}
+
+// Амжилттай хадгалсны дараа энэ цонхны хувилбарыг шинэчилнэ (дараагийн хадгалалт зөрчилгvй байхын тулд).
+function updateRev(section, data){
+  if(rev && data.rev !== undefined) rev[section] = data.rev;
+}
 
 const pwInput = document.getElementById("pwInput");
 const pwSubmit = document.getElementById("pwSubmit");
@@ -564,12 +578,13 @@ document.getElementById("saveWeeksBtn").addEventListener("click", async () => {
   weeks.forEach((w) => { w.youtubeId = extractYoutubeId(w.youtubeId); });
   renderWeeks();
   try{
-    const data = await callAppsScript({ action: "saveWeeks", password: ADMIN_PASSWORD, weeks });
+    const data = await callAppsScript({ action: "saveWeeks", password: ADMIN_PASSWORD, weeks, baseRev: rev ? rev.weeks : undefined });
     if(!data.ok){
-      statusEl.textContent = data.error === "unauthorized" ? "Нууц vг буруу." : "Алдаа гарлаа.";
+      statusEl.textContent = saveErrorMessage(data);
       statusEl.className = "status err";
       return;
     }
+    updateRev("weeks", data);
     statusEl.textContent = savedMessage(data);
     statusEl.className = "status ok";
   }catch(e){
@@ -603,12 +618,13 @@ document.getElementById("saveSiteBtn").addEventListener("click", async () => {
   statusEl.textContent = "Хадгалж байна...";
   statusEl.className = "status";
   try{
-    const data = await callAppsScript({ action: "saveSite", password: ADMIN_PASSWORD, site });
+    const data = await callAppsScript({ action: "saveSite", password: ADMIN_PASSWORD, site, baseRev: rev ? rev.site : undefined });
     if(!data.ok){
-      statusEl.textContent = data.error === "unauthorized" ? "Нууц vг буруу." : "Алдаа гарлаа.";
+      statusEl.textContent = saveErrorMessage(data);
       statusEl.className = "status err";
       return;
     }
+    updateRev("site", data);
     siteConfig = site;
     statusEl.textContent = savedMessage(data);
     statusEl.className = "status ok";
@@ -640,12 +656,13 @@ document.getElementById("saveOrgBtn").addEventListener("click", async () => {
   statusEl.textContent = "Хадгалж байна...";
   statusEl.className = "status";
   try{
-    const data = await callAppsScript({ action: "saveOrg", password: ADMIN_PASSWORD, org: rows });
+    const data = await callAppsScript({ action: "saveOrg", password: ADMIN_PASSWORD, org: rows, baseRev: rev ? rev.org : undefined });
     if(!data.ok){
-      statusEl.textContent = data.error === "unauthorized" ? "Нууц vг буруу." : "Алдаа гарлаа.";
+      statusEl.textContent = saveErrorMessage(data);
       statusEl.className = "status err";
       return;
     }
+    updateRev("org", data);
     orgRows = rows;
     statusEl.textContent = savedMessage(data);
     statusEl.className = "status ok";
@@ -1227,14 +1244,21 @@ async function tryLogin(){
     // youtubeId талбаруудыг эндээс цэвэрлэнэ (өмнөх stale session-ээс vлдсэн бvтэн URL байвал засна)
     (bundle.weeks || []).forEach((w) => { w.youtubeId = extractYoutubeId(w.youtubeId); });
 
-    // Нууц vгийг шууд баталгаажуулахын тулд одоо байгаа (цэвэрлэсэн) мэдээллийг буцааж бичнэ
-    const data = await callAppsScript({ action: "saveWeeks", password: pw, weeks: bundle.weeks });
+    // Нууц vгийг юу ч бичихгvйгээр шалгана. Хуучин backend энэ vйлдлийг танихгvй бол
+    // (unknown_action) өмнөх шигээ өгөгдлийг буцааж бичих аргаар шалгана.
+    let data = await callAppsScript({ action: "verifyPassword", password: pw });
+    if(data.error === "unknown_action"){
+      data = await callAppsScript({ action: "saveWeeks", password: pw, weeks: bundle.weeks });
+    }
     if(!data.ok){
       pwErr.textContent = "Нууц vг буруу байна.";
       pwErr.hidden = false;
       return;
     }
 
+    // Хувилбарыг өгөгдөлтэй НЭГ хариунаас авна — хоёр өөр хvсэлтээс авбал хооронд нь
+    // хийгдсэн хадгалалтыг анзаарахгvй орхих эрсдэлтэй.
+    rev = bundle.rev ? { weeks: bundle.rev.weeks, site: bundle.rev.site, org: bundle.rev.org } : null;
     weeks = bundle.weeks || [];
     siteConfig = bundle.site || {};
     orgRows = bundle.org || [];

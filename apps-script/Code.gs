@@ -232,8 +232,47 @@ const GITHUB_CONFIG_PATH = "config.json";
 
 // doGet болон GitHub-д нийтлэх config.json хоёулаа яг ижил агуулгатай байх ёстой
 // (эс тэгвээс cron болон шууд нийтлэлт ээлжлэн commit хийж "эргэлдэнэ").
+// rev нь админ цонх хуучирсан эсэхийг шалгахад хэрэглэгдэнэ (ажилтны хуудас үл тооно).
 function buildPublicBundle() {
-  return { weeks: readWeeks(), site: readSite(), org: readOrg() };
+  return { weeks: readWeeks(), site: readSite(), org: readOrg(), rev: readRevisions() };
+}
+
+/* ---------- Зэрэг засварлалтаас хамгаалах (revision) ---------- */
+// Хоёр цонх/админ нэг хэсгийг зэрэг засвал сvvлд хадгалсан нь нөгөөгийнхийг
+// чимээгvй дарж устгадаг байсан. Хэсэг бvрийн хувилбарын дугаарыг хадгалж,
+// хуучирсан цонхоос хадгалахыг татгалзана.
+const REV_KEYS = { weeks: "REV_WEEKS", site: "REV_SITE", org: "REV_ORG" };
+
+function readRevisions() {
+  const p = PropertiesService.getScriptProperties();
+  return {
+    weeks: Number(p.getProperty(REV_KEYS.weeks)) || 0,
+    site: Number(p.getProperty(REV_KEYS.site)) || 0,
+    org: Number(p.getProperty(REV_KEYS.org)) || 0,
+  };
+}
+
+// Шалгах–бичих–дугаар өсгөх гурвыг lock дотор хийнэ. Агуулга бодитоор өөрчлөгдсөн
+// vед л дугаарыг өсгөнө (өөрчлөлтгvй хадгалалт бусад цонхыг хуучруулахгvй).
+// baseRev ирээгvй бол (хуучин admin.html) шалгалтгvйгээр хадгална.
+function saveSection(section, baseRev, readFn, writeFn) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const current = Number(props.getProperty(REV_KEYS[section])) || 0;
+    if (baseRev !== undefined && baseRev !== null && Number(baseRev) !== current) {
+      return { conflict: true, rev: current };
+    }
+    const before = JSON.stringify(readFn());
+    writeFn();
+    const changed = JSON.stringify(readFn()) !== before;
+    const rev = changed ? current + 1 : current;
+    if (changed) props.setProperty(REV_KEYS[section], String(rev));
+    return { conflict: false, rev: rev };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function githubErrorMessage(res) {
@@ -301,9 +340,10 @@ function publishConfigToGitHub() {
 }
 
 // Админ хадгалсны дараа config.json-г нийтэлж, vр дvнг хариунд хавсаргана.
-function savedResponse() {
+function savedResponse(saved) {
+  if (saved.conflict) return jsonResponse({ ok: false, error: "conflict", rev: saved.rev });
   const p = publishConfigToGitHub();
-  return jsonResponse({ ok: true, publish: p.status, publishCode: p.code || 0, publishDetail: p.detail || "" });
+  return jsonResponse({ ok: true, rev: saved.rev, publish: p.status, publishCode: p.code || 0, publishDetail: p.detail || "" });
 }
 
 /* ---------- Gemini AI (чөлөөт бичвэрийн хариулт vнэлэх) ---------- */
@@ -535,22 +575,24 @@ function doPost(e) {
     return jsonResponse({ ok: true });
   }
 
+  // Нэвтрэх vед нууц vгийг юу ч бичихгvйгээр шалгана.
+  if (action === "verifyPassword") {
+    return jsonResponse({ ok: true, rev: readRevisions() });
+  }
+
   if (action === "saveWeeks") {
     if (!Array.isArray(body.weeks)) return jsonResponse({ ok: false, error: "expected_weeks_array" });
-    writeWeeks(body.weeks);
-    return savedResponse();
+    return savedResponse(saveSection("weeks", body.baseRev, readWeeks, () => writeWeeks(body.weeks)));
   }
 
   if (action === "saveSite") {
     if (!body.site || typeof body.site !== "object") return jsonResponse({ ok: false, error: "expected_site_object" });
-    writeSite(body.site);
-    return savedResponse();
+    return savedResponse(saveSection("site", body.baseRev, readSite, () => writeSite(body.site)));
   }
 
   if (action === "saveOrg") {
     if (!Array.isArray(body.org)) return jsonResponse({ ok: false, error: "expected_org_array" });
-    writeOrg(body.org);
-    return savedResponse();
+    return savedResponse(saveSection("org", body.baseRev, readOrg, () => writeOrg(body.org)));
   }
 
   if (action === "saveScores") {

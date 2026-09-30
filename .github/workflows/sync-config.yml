@@ -28,8 +28,9 @@ jobs:
         run: |
           URL="https://script.google.com/macros/s/AKfycbwq2Oeh5PEyqoT1SAD3HAahmSrOtAYL4n5lUCzGDIWZtI06es05-0v9yfGonSZKIXXv/exec"
           OUT="$RUNNER_TEMP/config.json.new"
-          persistent=""
-          for attempt in 1 2 3 4 5; do
+          ATTEMPTS=5
+          script_errors=0
+          for attempt in $(seq 1 $ATTEMPTS); do
             code=$(curl -sL --max-time 25 -o "$OUT" -w "%{http_code}" "$URL" || true)
             if [ "$code" = "200" ] && node -e "
               const d = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
@@ -39,17 +40,23 @@ jobs:
               echo "fetched=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            # Apps Script-ийн тохиргоо/кодын алдаа (эзэмшигч засах шаардлагатай) — дахин
-            # оролдоод нэмэргvй тул шууд илрvvлнэ.
-            if [ -s "$OUT" ] && grep -qiE "Authorization is required|Script function not found|TypeError|ReferenceError|SyntaxError" "$OUT"; then
-              persistent="yes"
-              break
+            # Apps Script-ийн тохиргоо/кодын алдааны хуудас эсэх. Google-ийн тvр зуурын алдааны
+            # хуудсууд дотор JavaScript (жишээ нь "TypeError" гэсэн vг) байдаг тул <script>/<style>
+            # хэсгийг хасаад зөвхөн харагдах текстээс хайна.
+            if [ -s "$OUT" ] && node -e "
+              const t = require('fs').readFileSync(process.argv[1], 'utf8')
+                .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ');
+              process.exit(/Authorization is required|Script function not found|TypeError|ReferenceError|SyntaxError/i.test(t) ? 0 : 1);
+            " "$OUT" 2>/dev/null; then
+              script_errors=$((script_errors + 1))
             fi
             echo "Attempt $attempt failed (HTTP ${code:-none}), retrying..."
-            if [ "$attempt" -lt 5 ]; then sleep $((attempt * 5)); fi
+            if [ "$attempt" -lt "$ATTEMPTS" ]; then sleep $((attempt * 5)); fi
           done
 
-          if [ -n "$persistent" ]; then
+          # Бvх оролдлого ижил алдааны хуудас буцаасан бол л байнгын эвдрэл (эзэмшигч засах
+          # шаардлагатай) гэж vзнэ — нэг удаагийн тохиолдол тvр саатал байдаг.
+          if [ "$script_errors" -eq "$ATTEMPTS" ]; then
             echo "::error title=Apps Script deployment problem::Apps Script returned an authorization or script error. Open the Apps Script editor, redeploy and grant permissions if asked."
             head -c 600 "$OUT"; echo
             exit 1

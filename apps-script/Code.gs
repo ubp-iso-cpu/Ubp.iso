@@ -178,6 +178,66 @@ function normalizeKey(s) {
     .trim();
 }
 
+const CYR2LAT = { "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "yo", "ж": "j", "з": "z", "и": "i", "й": "i",
+  "к": "k", "л": "l", "м": "m", "н": "n", "о": "o", "ө": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ү": "u",
+  "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sh", "ъ": "i", "ы": "i", "ь": "i", "э": "e", "ю": "yu", "я": "ya" };
+
+function hasCyrillic(s) {
+  return /[Ѐ-ӿ]/.test(s);
+}
+
+function isLatinName(s) {
+  return !hasCyrillic(s) && /[a-z]/i.test(s);
+}
+
+// Латинаар бичсэн нэрийг ("Munkhsuld") кирилл нэртэй ("Мөнхсүлд") дуудлагаар нь тулгах
+// "араг яс": галиглалын түгээмэл ялгааг (kh/h/x, ө/ү/o/u, ts/c, давхар эгшиг, зураас, зай,
+// ь→i) тооцохгvй. Хэт өргөн тул зөвхөн латин ↔ кирилл тулгахад хэрэглэнэ.
+function translitKey(name) {
+  let s = String(name || "").normalize("NFC").replace(/[​-‍﻿]/g, "").toLowerCase();
+  const cyr = hasCyrillic(s);
+  s = s.replace(/[Ѐ-ӿ]/g, (ch) => (ch in CYR2LAT ? CYR2LAT[ch] : ch));
+  if (cyr) s = s.replace(/v/g, "u"); // кирилл нэр доторх латин "v" нь "ү"-гийн орлуулга
+  return s
+    .replace(/[·․‧]/g, ".")
+    .replace(/[\s\-]+/g, "")
+    .replace(/kh|x/g, "h")
+    .replace(/zh/g, "j")
+    .replace(/oe|ue|[öü]/g, "u")
+    .replace(/o/g, "u")
+    .replace(/c(?!h)/g, "ts")
+    .replace(/w/g, "v")
+    .replace(/y/g, "i")
+    .replace(/([aeiu])\1+/g, "$1");
+}
+
+// Ижил алба+тушаалд латин нэртэй бичлэгийг дуудлага нь таарсан цорын ганц кирилл
+// бичлэгтэй (эсвэл бусад латин хувилбартай) нэгтгэнэ. Нэг араг ястай кирилл бичлэг 2+
+// байвал аль нь болохыг мэдэх боломжгvй тул нэгтгэхгvй.
+function mergeLatinSpellings(people) {
+  const buckets = {};
+  Object.keys(people).forEach((key) => {
+    const p = people[key];
+    const b = normalizeKey(p.org) + "||" + normalizeKey(p.position) + "||" + translitKey(Object.keys(p.variants)[0]);
+    (buckets[b] = buckets[b] || []).push(key);
+  });
+  Object.keys(buckets).forEach((b) => {
+    const keys = buckets[b];
+    if (keys.length < 2) return;
+    const latin = keys.filter((k) => Object.keys(people[k].variants).every(isLatinName));
+    const cyrillic = keys.filter((k) => latin.indexOf(k) === -1);
+    if (!latin.length || cyrillic.length > 1) return;
+    const target = people[cyrillic.length ? cyrillic[0] : latin[0]];
+    keys.forEach((k) => {
+      const src = people[k];
+      if (src === target) return;
+      Object.keys(src.variants).forEach((n) => { target.variants[n] = (target.variants[n] || 0) + src.variants[n]; });
+      Object.keys(src.completed).forEach((w) => { target.completed[w] = true; });
+      delete people[k];
+    });
+  });
+}
+
 /* ---------- Progress (event log) ---------- */
 const PROGRESS_COLUMNS = ["timestamp", "org", "position", "name", "weekId", "event"];
 
@@ -359,12 +419,15 @@ function readProgressSummary() {
     }
   });
 
-  // Хамгийн олон удаа бичигдсэн хувилбарыг vндсэн нэр болгоно; нэгтгэсэн бол бvх
-  // хувилбарыг (aliases) буцааж, админ нэгтгэлт зөв эсэхийг шалгах боломжтой болгоно.
+  mergeLatinSpellings(people);
+
+  // Хамгийн олон удаа бичигдсэн хувилбарыг (кирилл хувилбар байвал түүнээс) vндсэн нэр
+  // болгоно; нэгтгэсэн бол бvх хувилбарыг (aliases) буцааж, админ шалгах боломжтой болгоно.
   const peopleList = Object.keys(people).map((k) => {
     const p = people[k];
     const names = Object.keys(p.variants);
-    const name = names.reduce((best, n) => (p.variants[n] > p.variants[best] ? n : best), names[0]);
+    const pool = names.some(hasCyrillic) ? names.filter(hasCyrillic) : names;
+    const name = pool.reduce((best, n) => (p.variants[n] > p.variants[best] ? n : best), pool[0]);
     const person = { org: p.org, position: p.position, name: name, completed: p.completed };
     if (names.length > 1) person.aliases = names;
     return person;

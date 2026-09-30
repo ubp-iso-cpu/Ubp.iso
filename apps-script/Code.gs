@@ -159,10 +159,23 @@ function writeOrg(rows) {
   replaceSheetRows(sheet, ["department", "position"], out);
 }
 
-// Нэрийг том/жижиг vсэг, зайн ялгаа vл хамааран харьцуулах түлхvvр болгож жигдэлнэ
-// (жишээ нь "С.Мэнхvvл" vs "с.мэнхvvл" ижил хvн гэж танигдана).
+// Латин vсгийг ижил харагддаг кирилл vсэг болгоно (гар сольж бичихэд элбэг: латин "C" ба
+// кирилл "С"). Латин "v" кирилл нэрэнд зөвхөн "ү"-гийн оронд бичигддэг.
+const HOMOGLYPHS = { a: "а", b: "в", c: "с", e: "е", h: "н", k: "к", m: "м", o: "о", p: "р", t: "т", x: "х", y: "у", v: "ү", "ё": "е" };
+
+// Зөвхөн харьцуулахад зориулсан түлхvvр (Sheet-ийн өгөгдлийг өөрчлөхгvй): том/жижиг vсэг,
+// давхар зай, цэг/зураасны орчмын зай, латин/кирилл ижил vсэг, харагдахгvй тэмдэгтийг
+// тооцохгvй — "С. Мөнхзул", "С.Мөнхзул", "с.мөнхзул", латин "C.Мөнхзул" нэг хvн болно.
 function normalizeKey(s) {
-  return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+  return String(s || "")
+    .normalize("NFC")
+    .replace(/[​-‍﻿]/g, "")
+    .toLowerCase()
+    .replace(/[a-zё]/g, (ch) => HOMOGLYPHS[ch] || ch)
+    .replace(/[·․‧]/g, ".")
+    .replace(/\s*([.,\-])\s*/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /* ---------- Progress (event log) ---------- */
@@ -326,27 +339,36 @@ function readProgressSummary() {
   const weekIds = weeks.map((w) => w.id);
 
   // Хvн бvрийг (алба+тушаал+нэр) нэгтгэж, тэдний бvртгvvлсэн болон дуусгасан
-  // сургалтуудыг цуглуулна. Нэрээ өөр өөр vед том/жижиг vсэг, зайгаар өөрөөр
-  // бичсэн ч (жишээ нь "С.Мэнхvvл" vs "с.мэнхvvл") ижил хvн гэж танихын тулд
-  // харьцуулах түлхvvрийг жигдэлж (normalize) vvсгэнэ — харин анх бvртгэгдсэн
-  // бичлэгийн жинхэнэ хэлбэрийг харуулахдаа хэвээр vлдээнэ.
-  const people = {}; // key -> {org, position, name, completed:Set}
+  // сургалтуудыг цуглуулна. Нэрээ өөр өөр vед өөрөөр бичсэн ч (normalizeKey-г харна)
+  // нэг хvн гэж танина. Зөвхөн ижил алба+тушаалтай бол нэгтгэнэ — өөр албаны ижил
+  // нэртэй хvмvvс ихэвчлэн өөр хvн байдаг.
+  const people = {}; // key -> {org, position, completed, variants: {бичигдсэн нэр: тоо}}
   rows.forEach((r) => {
     const org = String(r[1] || "(тодорхойгvй)");
     const position = String(r[2] || "");
-    const name = String(r[3] || "(тодорхойгvй)");
+    const name = String(r[3] || "(тодорхойгvй)").trim().replace(/\s+/g, " ");
     const weekId = String(r[4] || "");
     const event = String(r[5] || "");
     const key = normalizeKey(org) + "||" + normalizeKey(position) + "||" + normalizeKey(name);
     if (!people[key]) {
-      people[key] = { org: org, position: position, name: name, completed: {} };
+      people[key] = { org: org, position: position, completed: {}, variants: {} };
     }
+    people[key].variants[name] = (people[key].variants[name] || 0) + 1;
     if (event === "video_completed" && weekId) {
       people[key].completed[weekId] = true;
     }
   });
 
-  const peopleList = Object.keys(people).map((k) => people[k]);
+  // Хамгийн олон удаа бичигдсэн хувилбарыг vндсэн нэр болгоно; нэгтгэсэн бол бvх
+  // хувилбарыг (aliases) буцааж, админ нэгтгэлт зөв эсэхийг шалгах боломжтой болгоно.
+  const peopleList = Object.keys(people).map((k) => {
+    const p = people[k];
+    const names = Object.keys(p.variants);
+    const name = names.reduce((best, n) => (p.variants[n] > p.variants[best] ? n : best), names[0]);
+    const person = { org: p.org, position: p.position, name: name, completed: p.completed };
+    if (names.length > 1) person.aliases = names;
+    return person;
+  });
 
   // Сургалт тус бvрийн дуусгасан тоо
   const perWeek = {};

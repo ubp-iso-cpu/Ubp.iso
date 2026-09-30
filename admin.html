@@ -754,10 +754,10 @@ function renderReport(summary){
       </thead>
       <tbody>
         ${people.map(p => `
-          <tr data-org="${escapeAttr(p.org)}" data-filter="${escapeAttr((p.position + " " + p.name).toLowerCase())}">
+          <tr data-org="${escapeAttr(p.org)}" data-filter="${escapeAttr((p.position + " " + p.name + " " + (p.aliases || []).join(" ")).toLowerCase())}">
             <td>${escapeHtml(p.org)}</td>
             <td>${escapeHtml(p.position || "")}</td>
-            <td>${escapeHtml(p.name)}</td>
+            <td>${escapeHtml(p.name)}${p.aliases ? ` <span style="font-size:11.5px; color:#8a8272; cursor:help;" title="${escapeAttr("Нэгтгэсэн хувилбарууд: " + p.aliases.join(" | "))}">(${p.aliases.length} хувилбараар бичигдсэн)</span>` : ""}</td>
             ${weekIds.map(id => `<td style="text-align:center;">${p.completed && p.completed[id] ? "✓" : "—"}</td>`).join("")}
           </tr>
         `).join("")}

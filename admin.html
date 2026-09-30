@@ -423,7 +423,7 @@ function publishHint(data){
   else if(code === 404) hint = "token Ubp.iso repo-г харж чадахгvй байна — Resource owner нь ubp-iso-cpu, Ubp.iso сонгогдсон эсэхийг шалгана уу";
   // Google-ийн мессеж доторх зөвшөөрлийн холбоосыг нээхэд зөвшөөрөл олгогдохгvй (андуурал
   // vvсгэдэг) тул нарийвчилсан мессежийг харуулахгvй, зөвхөн хийх алхмыг заана.
-  else if(/permission|authoriz/i.test(detail)) return "Apps Script-д гадагш хандах зөвшөөрөл өгөөгvй — Apps Script editor дээр publishConfigToGitHub функцийг сонгоод Run → Review permissions → Allow дарна уу";
+  else if(/permission|authoriz|external_request|UrlFetchApp|зөвшөөрөл/i.test(detail)) return "Apps Script-д гадагш хандах зөвшөөрөл өгөөгvй — Apps Script editor дээр publishConfigToGitHub функцийг сонгоод Run → Review permissions → Allow дарна уу";
   else hint = "тодорхойгvй алдаа";
   return hint + (detail ? " [" + detail + "]" : "");
 }

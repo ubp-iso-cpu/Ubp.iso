@@ -229,11 +229,44 @@ function mergeLatinSpellings(people) {
     if (!latin.length || cyrillic.length > 1) return;
     const target = people[cyrillic.length ? cyrillic[0] : latin[0]];
     keys.forEach((k) => {
-      const src = people[k];
-      if (src === target) return;
-      Object.keys(src.variants).forEach((n) => { target.variants[n] = (target.variants[n] || 0) + src.variants[n]; });
-      Object.keys(src.completed).forEach((w) => { target.completed[w] = true; });
-      delete people[k];
+      if (people[k] !== target) mergePerson(people, target, k);
+    });
+  });
+}
+
+// srcKey бичлэгийн нэрийн хувилбар болон явцыг target-д нийлvvлж, srcKey-г устгана.
+function mergePerson(people, target, srcKey) {
+  const src = people[srcKey];
+  Object.keys(src.variants).forEach((n) => { target.variants[n] = (target.variants[n] || 0) + src.variants[n]; });
+  Object.keys(src.completed).forEach((w) => { target.completed[w] = true; });
+  delete people[srcKey];
+}
+
+// Нэрийн эхэнд байгаа овгийн эхний vсэг ("Д.", "Ch.") — 1–3 vсэг ба цэг.
+const INITIAL_RE = /^\s*[A-Za-zЀ-ӿ]{1,3}\s*\.\s*(?=\S)/;
+
+// Ижил алба+тушаалд овгийн vсэггvй нэрийг ("Чимэдлхам") овгийн vсэгтэй цорын ганц ижил
+// нэртэй ("Д.Чимэдлхам") нэгтгэнэ. 2+ хvн таарвал (Д.Чимэдлхам, Б.Чимэдлхам) аль нь
+// болохыг мэдэх боломжгvй тул нэгтгэхгvй.
+function mergeMissingInitials(people) {
+  const groups = {};
+  Object.keys(people).forEach((key) => {
+    const p = people[key];
+    const g = normalizeKey(p.org) + "||" + normalizeKey(p.position);
+    (groups[g] = groups[g] || []).push(key);
+  });
+  const firstName = (k) => Object.keys(people[k].variants)[0];
+  Object.keys(groups).forEach((g) => {
+    const keys = groups[g];
+    const initialed = keys.filter((k) => INITIAL_RE.test(firstName(k)));
+    keys.filter((k) => !INITIAL_RE.test(firstName(k))).forEach((bareKey) => {
+      const bare = firstName(bareKey);
+      const matches = initialed.filter((k) => {
+        const base = firstName(k).replace(INITIAL_RE, "");
+        return normalizeKey(base) === normalizeKey(bare) ||
+          ((isLatinName(base) || isLatinName(bare)) && translitKey(base) === translitKey(bare));
+      });
+      if (matches.length === 1) mergePerson(people, people[matches[0]], bareKey);
     });
   });
 }
@@ -420,13 +453,16 @@ function readProgressSummary() {
   });
 
   mergeLatinSpellings(people);
+  mergeMissingInitials(people);
 
-  // Хамгийн олон удаа бичигдсэн хувилбарыг (кирилл хувилбар байвал түүнээс) vндсэн нэр
-  // болгоно; нэгтгэсэн бол бvх хувилбарыг (aliases) буцааж, админ шалгах боломжтой болгоно.
+  // Хамгийн олон удаа бичигдсэн хувилбарыг vндсэн нэр болгоно — кирилл, овгийн vсэгтэй
+  // (бvтэн) хувилбарыг давуу vзнэ; нэгтгэсэн бол бvх хувилбарыг (aliases) буцааж, админ
+  // шалгах боломжтой болгоно.
   const peopleList = Object.keys(people).map((k) => {
     const p = people[k];
     const names = Object.keys(p.variants);
-    const pool = names.some(hasCyrillic) ? names.filter(hasCyrillic) : names;
+    let pool = names.some(hasCyrillic) ? names.filter(hasCyrillic) : names;
+    if (pool.some((n) => INITIAL_RE.test(n))) pool = pool.filter((n) => INITIAL_RE.test(n));
     const name = pool.reduce((best, n) => (p.variants[n] > p.variants[best] ? n : best), pool[0]);
     const person = { org: p.org, position: p.position, name: name, completed: p.completed };
     if (names.length > 1) person.aliases = names;

@@ -311,7 +311,8 @@ document.getElementById("loginForm").addEventListener("submit", (e) => {
   const org = getFieldValue(orgSelect, orgText);
   const position = getFieldValue(posSelect, posText);
   const name = document.getElementById("loginName").value.trim();
-  if(!org || !name){
+  // Албан тушаалыг заавал сонгуулна — хоосон орхивол тайланд ижил хvн хоёр мөр болж хуваагддаг.
+  if(!org || !position || !name){
     document.getElementById("loginErr").hidden = false;
     return;
   }

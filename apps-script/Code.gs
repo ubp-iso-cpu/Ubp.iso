@@ -245,6 +245,17 @@ function mergePerson(people, target, srcKey) {
 // Нэрийн эхэнд байгаа овгийн эхний vсэг ("Д.", "Ch.") — 1–3 vсэг ба цэг.
 const INITIAL_RE = /^\s*[A-Za-zЀ-ӿ]{1,3}\s*\.\s*(?=\S)/;
 
+// Хоёр нэр нэг хvнийх эсэх: жигдэлсэн хэлбэр ижил, латин ↔ кирилл дуудлага ижил, эсвэл
+// нэгд нь л овгийн vсэг байгаа ч бусад нь ижил. Ялгаатай овгийн vсэгтэй нэрс (Д. ба Б.) таарахгvй.
+function sameName(a, b) {
+  const eq = (x, y) => normalizeKey(x) === normalizeKey(y) ||
+    ((isLatinName(x) || isLatinName(y)) && translitKey(x) === translitKey(y));
+  if (eq(a, b)) return true;
+  const ai = INITIAL_RE.test(a), bi = INITIAL_RE.test(b);
+  if (ai === bi) return false;
+  return ai ? eq(a.replace(INITIAL_RE, ""), b) : eq(a, b.replace(INITIAL_RE, ""));
+}
+
 // Ижил алба+тушаалд овгийн vсэггvй нэрийг ("Чимэдлхам") овгийн vсэгтэй цорын ганц ижил
 // нэртэй ("Д.Чимэдлхам") нэгтгэнэ. 2+ хvн таарвал (Д.Чимэдлхам, Б.Чимэдлхам) аль нь
 // болохыг мэдэх боломжгvй тул нэгтгэхгvй.
@@ -260,13 +271,27 @@ function mergeMissingInitials(people) {
     const keys = groups[g];
     const initialed = keys.filter((k) => INITIAL_RE.test(firstName(k)));
     keys.filter((k) => !INITIAL_RE.test(firstName(k))).forEach((bareKey) => {
-      const bare = firstName(bareKey);
-      const matches = initialed.filter((k) => {
-        const base = firstName(k).replace(INITIAL_RE, "");
-        return normalizeKey(base) === normalizeKey(bare) ||
-          ((isLatinName(base) || isLatinName(bare)) && translitKey(base) === translitKey(bare));
-      });
+      const matches = initialed.filter((k) => sameName(firstName(k), firstName(bareKey)));
       if (matches.length === 1) mergePerson(people, people[matches[0]], bareKey);
+    });
+  });
+}
+
+// Албан тушаалаа сонгоогvй (хоосон) бичлэгийг ижил албаны ижил нэртэй, тушаалтай цорын
+// ганц бичлэгтэй нэгтгэнэ. 2+ хvн таарвал аль нь болохыг мэдэх боломжгvй тул нэгтгэхгvй.
+function mergeMissingPositions(people) {
+  const byOrg = {};
+  Object.keys(people).forEach((key) => {
+    const o = normalizeKey(people[key].org);
+    (byOrg[o] = byOrg[o] || []).push(key);
+  });
+  const firstName = (k) => Object.keys(people[k].variants)[0];
+  Object.keys(byOrg).forEach((o) => {
+    const keys = byOrg[o];
+    const withPosition = keys.filter((k) => String(people[k].position).trim());
+    keys.filter((k) => !String(people[k].position).trim()).forEach((k) => {
+      const matches = withPosition.filter((t) => sameName(firstName(t), firstName(k)));
+      if (matches.length === 1) mergePerson(people, people[matches[0]], k);
     });
   });
 }
@@ -454,6 +479,7 @@ function readProgressSummary() {
 
   mergeLatinSpellings(people);
   mergeMissingInitials(people);
+  mergeMissingPositions(people);
 
   // Хамгийн олон удаа бичигдсэн хувилбарыг vндсэн нэр болгоно — кирилл, овгийн vсэгтэй
   // (бvтэн) хувилбарыг давуу vзнэ; нэгтгэсэн бол бvх хувилбарыг (aliases) буцааж, админ

@@ -26,12 +26,15 @@ jobs:
       - name: Fetch and validate latest config from Apps Script
         id: fetch
         run: |
-          URL="https://script.google.com/macros/s/AKfycbwq2Oeh5PEyqoT1SAD3HAahmSrOtAYL4n5lUCzGDIWZtI06es05-0v9yfGonSZKIXXv/exec"
+          URL="https://script.google.com/macros/s/AKfycbwK2ONqsmKYgOTw2CXBVpDp8RVAtPzu5dm_P5RjMZfsp2SXKkw59GdsRUEB5S7fvdO8Vw/exec"
           OUT="$RUNNER_TEMP/config.json.new"
           ATTEMPTS=5
           script_errors=0
+          gone=0
           for attempt in $(seq 1 $ATTEMPTS); do
             code=$(curl -sL --max-time 25 -o "$OUT" -w "%{http_code}" "$URL" || true)
+            # 404/410: web app-ийн deployment устгагдсан/архивлагдсан (URL хvчингvй болсон).
+            if [ "$code" = "404" ] || [ "$code" = "410" ]; then gone=$((gone + 1)); fi
             if [ "$code" = "200" ] && node -e "
               const d = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
               process.exit(Array.isArray(d.weeks) ? 0 : 1);
@@ -53,6 +56,11 @@ jobs:
             echo "Attempt $attempt failed (HTTP ${code:-none}), retrying..."
             if [ "$attempt" -lt "$ATTEMPTS" ]; then sleep $((attempt * 5)); fi
           done
+
+          if [ "$gone" -eq "$ATTEMPTS" ]; then
+            echo "::error title=Apps Script web app URL no longer exists::HTTP ${code} on every attempt — the deployment was archived or deleted. Use Manage deployments → Edit → New version (keeps the URL), or update APPS_SCRIPT_URL in index.html, admin.html and this workflow to the new /exec URL."
+            exit 1
+          fi
 
           # Бvх оролдлого ижил алдааны хуудас буцаасан бол л байнгын эвдрэл (эзэмшигч засах
           # шаардлагатай) гэж vзнэ — нэг удаагийн тохиолдол тvр саатал байдаг.

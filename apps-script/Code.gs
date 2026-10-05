@@ -296,6 +296,27 @@ function mergeMissingPositions(people) {
   });
 }
 
+/* ---------- Гамшгийн дараах сэргээлт ---------- */
+// Шинэ Google Sheet дээр системийг дахин суулгахад: GitHub Pages дээрх сvvлийн config.json-оос
+// сургалт, сайтын текст, алба/тушаалыг хуулна. Apps Script editor дээрээс Run хийж нэг удаа
+// ажиллуулна (вэбээс дуудагдахгvй). Өгөгдөлтэй Sheet-ийг дарж бичихээс сэргийлж зогсоно.
+const PUBLISHED_CONFIG_URL = "https://ubp-iso-cpu.github.io/Ubp.iso/config.json";
+
+function restoreFromPublishedConfig() {
+  if (readWeeks().length > 0) {
+    throw new Error("Энэ Sheet-д сургалтын өгөгдөл аль хэдийн байна — сэргээлт хийгдсэнгvй.");
+  }
+  const res = UrlFetchApp.fetch(PUBLISHED_CONFIG_URL + "?t=" + Date.now(), { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error("config.json татаж чадсангvй: HTTP " + res.getResponseCode());
+  const data = JSON.parse(res.getContentText());
+  if (!Array.isArray(data.weeks) || !data.weeks.length) throw new Error("config.json-д сургалт алга.");
+  writeWeeks(data.weeks);
+  writeSite(data.site || {});
+  writeOrg(data.org || []);
+  getOrCreateSheet(SHEET_PROGRESS, PROGRESS_COLUMNS);
+  console.log("Сэргээлт амжилттай: сургалт " + data.weeks.length + ", алба/тушаал " + (data.org || []).length + " мөр.");
+}
+
 /* ---------- Progress (event log) ---------- */
 const PROGRESS_COLUMNS = ["timestamp", "org", "position", "name", "weekId", "event"];
 

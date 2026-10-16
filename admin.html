@@ -74,6 +74,10 @@
   }
   .field textarea{ resize:vertical; min-height:52px; }
   .field .hint{ font-size:11.5px; color:#9b9284; margin-top:4px; }
+  .field .hint.when{ font-size:12.5px; color:#5a5344; }
+  .sched{ font-size:12.5px; padding:7px 10px; border-radius:5px; background:#f1efe7; color:#5a5344; }
+  .sched.open{ background:#eef4f0; color:var(--forest); }
+  .sched.closed, .sched.bad{ background:#fbeeea; color:var(--err); font-weight:600; }
 
   .toolbar{ display:flex; gap:10px; align-items:center; margin:20px 0 14px; flex-wrap:wrap; }
   .status{ font-size:13px; color:#5a5344; }
@@ -390,16 +394,64 @@ function renderWeeks(){
         <div class="field" style="flex:1;">
           <label>Нээгдэх огноо/цаг</label>
           <input type="datetime-local" data-field="opensAt" data-i="${i}" value="${isoToLocalInput(w.opensAt)}">
+          <div class="hint when" data-when="opensAt" data-i="${i}"></div>
         </div>
         <div class="field" style="flex:1;">
           <label>Хаагдах огноо/цаг</label>
           <input type="datetime-local" data-field="closesAt" data-i="${i}" value="${isoToLocalInput(w.closesAt)}">
+          <div class="hint when" data-when="closesAt" data-i="${i}"></div>
         </div>
       </div>
+      <div class="sched" data-sched="${i}"></div>
     `;
     weekList.appendChild(card);
+    updateWeekSchedule(i);
   });
 }
+
+// Браузерын огноо/цагийн талбар компьютерын тохиргооноос хамааран 12 цагийн (AM/PM) хэлбэрээр
+// харагддаг тул "12:00 AM"-г vд дунд гэж андуурах эрсдэлтэй (бодит утга нь шөнө дунд 00:00).
+// Иймээс сонгосон утгыг 24 цагийн хэлбэрээр, гарагийн нэртэй нь давхар харуулна.
+const WEEKDAYS = ["Ням", "Даваа", "Мягмар", "Лхагва", "Пvрэв", "Баасан", "Бямба"];
+function humanDateTime(iso){
+  const d = new Date(iso);
+  if(!iso || isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  const hm = pad(d.getHours()) + ":" + pad(d.getMinutes());
+  const note = hm === "00:00" ? " — шөнө дунд (энэ өдөр эхлэх агшин)" : hm === "12:00" ? " — vд дунд" : "";
+  return d.getFullYear() + "." + pad(d.getMonth()+1) + "." + pad(d.getDate()) + " " + WEEKDAYS[d.getDay()] + ", " + hm + note;
+}
+function durationText(ms){
+  const min = Math.max(1, Math.round(ms / 60000));
+  const days = Math.floor(min / 1440), hours = Math.floor((min % 1440) / 60), mins = min % 60;
+  if(days) return days + " өдөр" + (hours ? " " + hours + " цаг" : "");
+  if(hours) return hours + " цаг" + (mins ? " " + mins + " минут" : "");
+  return mins + " минут";
+}
+// Ажилтны сайтын getWeekStatus()-тэй ижил дvрмээр (хоосон огноо = хязгааргvй) тооцно.
+function weekSchedule(w, now){
+  const opens = w.opensAt ? new Date(w.opensAt).getTime() : NaN;
+  const closes = w.closesAt ? new Date(w.closesAt).getTime() : NaN;
+  if(!isNaN(opens) && !isNaN(closes) && closes <= opens) return { cls: "bad", text: "Хаагдах цаг нээгдэх цагаас өмнө байна — засна уу." };
+  if(!isNaN(opens) && now < opens) return { cls: "", text: "Нээгдээгvй · нээгдэх хvртэл " + durationText(opens - now) };
+  if(!isNaN(closes) && now > closes) return { cls: "closed", text: "Хаагдсан — ажилтнуудад \"хугацаа дууссан\" гэж харагдана. Сунгах бол хаагдах цагийг ирээдvйн цаг болгоод хадгална уу." };
+  return { cls: "open", text: "Одоо нээлттэй" + (isNaN(closes) ? " · хаагдах хугацаагvй" : " · хаагдах хvртэл " + durationText(closes - now)) };
+}
+function updateWeekSchedule(i){
+  const w = weeks[i];
+  if(!w) return;
+  ["opensAt", "closesAt"].forEach((f) => {
+    const el = weekList.querySelector(`[data-when="${f}"][data-i="${i}"]`);
+    if(el) el.textContent = humanDateTime(w[f]) || "Хоосон — хугацааны хязгааргvй";
+  });
+  const s = weekSchedule(w, Date.now());
+  const el = weekList.querySelector(`[data-sched="${i}"]`);
+  if(el){ el.textContent = s.text; el.className = "sched " + s.cls; }
+}
+setInterval(() => weeks.forEach((_, i) => updateWeekSchedule(i)), 60 * 1000);
+
+// Энэ удаа хаагдах цагийг нь өөрчилсөн сургалтууд (хадгалахын өмнө өнгөрсөн цаг эсэхийг асууна).
+let editedCloses = new WeakSet();
 
 // Хадгалсны дараа ажилтнуудын сайтад хэзээ тусахыг тодорхой мэдэгдэнэ
 // (Apps Script-ийн publishConfigToGitHub()-ийн буцаасан төлөвөөр).
@@ -437,6 +489,8 @@ weekList.addEventListener("input", (e) => {
   if(!field || i === null) return;
   if(field === "opensAt" || field === "closesAt"){
     weeks[Number(i)][field] = localInputToIso(e.target.value);
+    if(field === "closesAt") editedCloses.add(weeks[Number(i)]);
+    updateWeekSchedule(Number(i));
   } else {
     weeks[Number(i)][field] = e.target.value;
   }
@@ -509,6 +563,23 @@ document.getElementById("addWeekBtn").addEventListener("click", () => {
 
 document.getElementById("saveWeeksBtn").addEventListener("click", async () => {
   const statusEl = document.getElementById("weeksStatus");
+  const now = Date.now();
+  const badIdx = weeks.findIndex((w) => weekSchedule(w, now).cls === "bad");
+  if(badIdx !== -1){
+    statusEl.textContent = (badIdx + 1) + "-р сургалтын хаагдах цаг нээгдэх цагаас өмнө байна — засаад дахин хадгална уу.";
+    statusEl.className = "status err";
+    return;
+  }
+  const pastCloses = weeks.map((w, i) => ({ w, i }))
+    .filter(({ w }) => editedCloses.has(w) && w.closesAt && new Date(w.closesAt).getTime() < now);
+  if(pastCloses.length && !confirm(
+    pastCloses.map(({ w, i }) => (i + 1) + "-р сургалт: " + humanDateTime(w.closesAt)).join("\n") +
+    "\n\nХаагдах цаг аль хэдийн өнгөрсөн тул ажилтнуудад \"хугацаа дууссан\" гэж харагдана. Тэгсэн ч хадгалах уу?"
+  )){
+    statusEl.textContent = "Хадгалаагvй. Хаагдах цагаа засаад дахин хадгална уу.";
+    statusEl.className = "status err";
+    return;
+  }
   statusEl.textContent = "Хадгалж байна...";
   statusEl.className = "status";
   // Хадгалахын өмнө youtubeId бvрийг цэвэрлэнэ (хуучин tab-аас vлдсэн бvтэн URL байсан ч засна)
@@ -522,6 +593,7 @@ document.getElementById("saveWeeksBtn").addEventListener("click", async () => {
       return;
     }
     updateRev("weeks", data);
+    editedCloses = new WeakSet();
     statusEl.textContent = savedMessage(data);
     statusEl.className = "status ok";
   }catch(e){
